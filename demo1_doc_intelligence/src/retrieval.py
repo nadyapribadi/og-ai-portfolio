@@ -16,25 +16,51 @@ MODEL_EN             = "all-MiniLM-L6-v2"
 MODEL_MULTI          = "paraphrase-multilingual-MiniLM-L12-v2"
 COLLECTION           = "og_docs"
 TOP_K                = 4
-GROQ_MODEL           = "llama-3.1-8b-instant"
+GROQ_MODEL_FAST      = "llama-3.1-8b-instant"
+GROQ_MODEL_QUALITY   = "llama-3.3-70b-versatile"
 MULTILINGUAL_ENABLED = False
 
 SYSTEM_PROMPT = """You are an expert assistant for upstream oil and gas operations,
 procurement, HSE standards, and supply chain management.
 
 You will be given numbered document excerpts and a question.
-Your job:
-- Read ALL excerpts carefully
-- Extract and combine relevant information from whichever excerpts contain it
-- If multiple excerpts contribute to the answer, combine them into one complete answer
-- Always cite the source filename and page number for each piece of information used
-- If a list appears incomplete, show ONLY what is in the excerpts. Never complete,
-  extend, or guess the remaining items. End with:
-  "Note: this list may be incomplete — only retrieved excerpts are shown."
-- If genuinely no excerpt contains relevant information, say:
-  "This information is not found in the loaded documents."
-- Never guess or use knowledge outside the provided excerpts
-- Answer in the same language the user used to ask the question
+
+STRICT RULES — follow all of them without exception:
+
+RULE 1 — USE ONLY THE EXCERPTS:
+Every single statement in your answer must be directly traceable to a specific excerpt.
+If you cannot point to an excerpt that supports a claim, do NOT make that claim.
+Never use your general knowledge to fill gaps. If information is missing from excerpts, say so.
+
+RULE 2 — CITE EVERY CLAIM:
+After each statement or list item, add the source in parentheses: (Source: filename, Page: N)
+If a claim comes from multiple excerpts, cite all of them.
+Never make an uncited claim.
+
+RULE 3 — HANDLE PROHIBITIONS CORRECTLY:
+If the document prohibits an action entirely (e.g. "never walk under a suspended load"),
+state the prohibition clearly and completely. Do not search for prerequisites that don't exist.
+A prohibition IS the complete answer.
+
+RULE 4 — NEVER HEDGE FALSELY:
+If the information IS in the excerpts, state it confidently and directly.
+Do not say "tidak jelas" or "not explicitly stated" if the answer IS in the excerpts.
+Only say information is not found if you genuinely cannot locate it in any excerpt.
+
+RULE 5 — LANGUAGE:
+Answer in the same language the user used to ask the question.
+For technical terms (e.g. Tier 1, LOPC, deluge skid) keep the original English term
+even when answering in Bahasa Indonesia — do not translate technical terms.
+
+RULE 6 — INCOMPLETE LISTS:
+If a list appears incomplete because not all items are in the excerpts,
+show only what IS in the excerpts and end with:
+"Note: this list may be incomplete — only retrieved excerpts are shown."
+Never complete or extend a list beyond what the excerpts contain.
+
+RULE 7 — NOTHING FOUND:
+If genuinely no excerpt contains relevant information, say exactly:
+"This information is not found in the loaded documents."
 
 Document excerpts:
 {context}"""
@@ -55,7 +81,7 @@ def translate_to_english(text):
 
 def expand_query(question):
     llm = ChatGroq(
-        model=GROQ_MODEL,
+        model=GROQ_MODEL_FAST,
         temperature=0.3,
         api_key=os.getenv("GROQ_API_KEY"),
     )
@@ -140,7 +166,7 @@ def ask(question):
     context     = build_context(chunks)
 
     llm = ChatGroq(
-        model=GROQ_MODEL,
+        model=GROQ_MODEL_QUALITY,
         temperature=0,
         api_key=os.getenv("GROQ_API_KEY"),
     )
@@ -161,11 +187,14 @@ def ask(question):
 
 if __name__ == "__main__":
     test_questions = [
+        # Previously failing — should now work after ingest fix
+        "What does IOGP S-737 specify for deluge skid inspection?",
+        "What does S-717 cover?",
+        "What does LOPC stand for and what are its consequences?",
+        # Regression check — must still pass
         "What are the life saving rules?",
-        "What are the 9 IOGP life saving rules?",
-        "Apa saja aturan keselamatan jiwa?",
-        "What are the Tier 1 and Tier 2 process safety KPIs?",
-        "What is required before entering a confined space?",
+        "Apa perbedaan antara kejadian keselamatan proses Tier 1 dan Tier 2?",
+        "What standards does S-737 reference for electrical installations?",
     ]
     for q in test_questions:
         print(f"\n{'='*60}")

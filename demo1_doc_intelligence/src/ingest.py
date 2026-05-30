@@ -2,7 +2,6 @@ import os
 import time
 from pathlib import Path
 from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
@@ -18,21 +17,56 @@ VECTORSTORE_MULTI = Path(__file__).parent.parent / "data" / "vectorstore_multi"
 MODEL_EN          = "all-MiniLM-L6-v2"
 MODEL_MULTI       = "paraphrase-multilingual-MiniLM-L12-v2"
 COLLECTION        = "og_docs"
-GROQ_MODEL        = "llama-3.1-8b-instant"
+GROQ_MODEL        = "llama-3.3-70b-versatile"
 
 
 def load_pdfs():
+    import pdfplumber
+    from langchain_core.documents import Document
+
     docs = []
     pdf_files = list(DOCS_DIR.glob("*.pdf"))
     if not pdf_files:
         raise FileNotFoundError(f"No PDFs found in {DOCS_DIR}")
+
     for pdf_path in pdf_files:
         print(f"  Loading: {pdf_path.name}")
-        loader = PyPDFLoader(str(pdf_path))
-        pages = loader.load()
-        for page in pages:
-            page.metadata["source_file"] = pdf_path.name
-        docs.extend(pages)
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            for page_num, page in enumerate(pdf.pages):
+                text = page.extract_text() or ""
+
+                tables = page.extract_tables()
+                if tables:
+                    table_md = []
+                    for table in tables:
+                        if not table:
+                            continue
+                        rows = []
+                        for row in table:
+                            clean = [cell or "" for cell in row]
+                            rows.append("| " + " | ".join(clean) + " |")
+                        if rows:
+                            header = rows[0]
+                            separator = "| " + " | ".join(
+                                ["---"] * len(table[0])
+                            ) + " |"
+                            table_md.append(
+                                header + "\n" + separator + "\n" +
+                                "\n".join(rows[1:])
+                            )
+                    if table_md:
+                        text = text + "\n\n[TABLE]\n" + "\n\n".join(table_md)
+
+                if text.strip():
+                    doc = Document(
+                        page_content=text,
+                        metadata={
+                            "source_file": pdf_path.name,
+                            "page": page_num,
+                        }
+                    )
+                    docs.append(doc)
+
     print(f"  → {len(docs)} pages loaded from {len(pdf_files)} PDFs")
     return docs
 
@@ -52,8 +86,10 @@ def generate_questions_for_chunk(llm, chunk_text):
     try:
         messages = [
             SystemMessage(content=(
-                "Generate 3 short questions that this text chunk would answer. "
-                "Return only the 3 questions, one per line, nothing else."
+                "Generate 5 questions that this text chunk would answer. "
+                "Make them diverse — use different vocabulary, technical terms, "
+                "and layman phrasings. Cover both specific details and general topics. "
+                "Return only the 5 questions, one per line, nothing else."
             )),
             HumanMessage(content=chunk_text[:2000]),
         ]
@@ -62,7 +98,7 @@ def generate_questions_for_chunk(llm, chunk_text):
             q.strip() for q in response.content.strip().split("\n")
             if q.strip()
         ]
-        return questions[:3]
+        return questions[:5]
     except Exception as e:
         print(f"    Warning: question generation failed — {e}")
         return []
