@@ -108,23 +108,18 @@ Question → langdetect → Google Translate if non-English
 
 ---
 
-## Customizing Sample Questions
+## Customizing for Your Own Documents
 
-If you replace the default documents with your own, update the sample questions in `app.py`.
+If you replace the default documents with your own, edit `config.py` — no changes needed in `app.py`.
 
-Find the `SAMPLE_QUESTIONS` dict (around line 110):
+`demo1_doc_intelligence/src/config.py` contains:
+- `APP_TITLE` and `APP_SUBTITLE` — app branding
+- `DOCUMENT_SOURCES` — list shown in sidebar
+- `SAMPLE_QUESTIONS` — clickable buttons by category
+- `CAPABILITY_CARDS` — cards shown on first load
+- `SOURCE_FRIENDLY` — friendly display names for PDF filenames
 
-```python
-SAMPLE_QUESTIONS = {
-    "🦺 HSE Rules": [
-        "What are the life saving rules?",
-        ...
-    ],
-    ...
-}
-```
-
-Replace with categories and questions relevant to your documents.
+Replace the values with content relevant to your documents. The app reads from this file at startup.
 
 ---
 
@@ -206,7 +201,8 @@ demo1_doc_intelligence/
 │   ├── vectorstore_en/    ← ChromaDB (gitignored, rebuilt by ingest.py)
 │   └── vectorstore_multi/ ← ChromaDB multilingual (gitignored, disabled)
 └── src/
+    ├── config.py          ← edit this to customize for your documents
     ├── ingest.py          ← PDF → chunks → vectorstore (~30 seconds)
     ├── retrieval.py       ← question → rerank → answer
-    └── app.py             ← Streamlit UI
+    └── app.py             ← Streamlit UI (imports from config.py)
 ```

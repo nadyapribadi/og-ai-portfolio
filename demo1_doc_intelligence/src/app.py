@@ -5,12 +5,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from retrieval import ask, load_vectorstore
+from config import (
+    APP_TITLE, APP_SUBTITLE,
+    DOCUMENT_SOURCES, SAMPLE_QUESTIONS,
+    CAPABILITY_CARDS, SOURCE_FRIENDLY,
+)
 
 # ─────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────
 st.set_page_config(
-    page_title="O&G Document Intelligence",
+    page_title=APP_TITLE,
     page_icon="🛢️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -337,52 +342,9 @@ div[data-testid="stAlert"] {
 
 
 # ─────────────────────────────────────────────
-# CONSTANTS
+# CONSTANTS — loaded from config.py
+# Edit config.py to customize for your documents
 # ─────────────────────────────────────────────
-SAMPLE_QUESTIONS = {
-    "🦺 HSE Rules": [
-        "What are the life saving rules?",
-        "What must I confirm before entering a confined space?",
-        "What are the hot work requirements in a hazardous area?",
-    ],
-    "📊 Process Safety": [
-        "What is the difference between Tier 1 and Tier 2 process safety events?",
-        "How are process safety KPIs measured?",
-        "What does LOPC stand for and what are its consequences?",
-    ],
-    "⚙️ Equipment Standards": [
-        "What does IOGP S-737 specify for deluge skid design?",
-        "What standards does S-737 reference for electrical installations?",
-        "What does IOGP S-717 cover for noise emitting equipment?",
-    ],
-    "🇮🇩 Bahasa Indonesia": [
-        "Apa saja aturan keselamatan jiwa menurut IOGP?",
-        "Apa yang harus dilakukan sebelum memasuki ruang tertutup?",
-        "Apa perbedaan antara kejadian keselamatan proses Tier 1 dan Tier 2?",
-    ],
-}
-
-DOCUMENT_SOURCES = [
-    "IOGP Report 459 — Life-Saving Rules",
-    "IOGP Report 456 — Process Safety KPIs",
-    "JIP33 S-737 — Deluge Skids (TRS + QRS)",
-    "JIP33 S-717 — Noise Equipment (TRS + QRS)",
-    "JIP33 S-719 — Water Mist Fire Protection",
-]
-
-# Friendly names for raw filenames shown in source tags
-SOURCE_FRIENDLY = {
-    "459.pdf": "IOGP 459 Life-Saving Rules",
-    "456.pdf": "IOGP 456 Process Safety KPIs",
-    "S-737v2026-03 TRS.pdf": "S-737 Deluge Skids (Technical)",
-    "S-737Qv2026-03 QRS.pdf": "S-737 Deluge Skids (Quality)",
-    "S-717v2025-03 TRS.pdf": "S-717 Noise Equipment (Technical)",
-    "S-717Qv2020-06 QRS.pdf": "S-717 Noise Equipment (Quality)",
-    "S-719v2025-01 TRS.pdf": "S-719 Water Mist (Technical)",
-    "S-719Qv2025-01 QRS.pdf": "S-719 Water Mist (Quality)",
-    "S-719Jv2025-01 TRS with Justification.pdf": "S-719 Water Mist (Justification)",
-}
-
 LANG_FLAGS = {
     "en": "🇬🇧 English",
     "id": "🇮🇩 Bahasa Indonesia",
@@ -555,16 +517,21 @@ try:
     vectorstore = get_vectorstore()
     chunk_count = vectorstore._collection.count()
     doc_count = len(DOCUMENT_SOURCES)
-except Exception as e:
-    st.error(f"Failed to load document index. Run `ingest.py` first.\n\n{e}")
+except Exception:
+    st.error(
+        "**Document index not found.**\n\n"
+        "Run ingest first:\n"
+        "```\npython demo1_doc_intelligence/src/ingest.py\n```\n\n"
+        "Then restart the app."
+    )
     st.stop()
 
 # Header with index stats
 st.markdown(f"""
 <div class="app-header">
     <div>
-        <div class="app-title">🛢️ O&G <span>Document Intelligence</span></div>
-        <div class="app-subtitle">Ask questions from IOGP standards · JIP33 specifications · Process safety guidelines</div>
+        <div class="app-title">🛢️ {APP_TITLE}</div>
+        <div class="app-subtitle">{APP_SUBTITLE}</div>
     </div>
     <div class="index-badge">
         <span>●</span> {doc_count} documents<br>
@@ -575,39 +542,17 @@ st.markdown(f"""
 
 # ── EMPTY STATE ──
 if not st.session_state.messages:
-    st.markdown("""
+    cards_html = "".join([
+        f"""<div class="capability-card">
+                <div class="capability-card-title">{c["title"]}</div>
+                <div class="capability-card-desc">{c["desc"]}</div>
+            </div>"""
+        for c in CAPABILITY_CARDS
+    ])
+    st.markdown(f"""
     <div class="empty-state">
         <div class="empty-state-title">What can I help you with?</div>
-        <div class="capability-grid">
-            <div class="capability-card">
-                <div class="capability-card-title">🦺 HSE & Safety Rules</div>
-                <div class="capability-card-desc">
-                    Ask about IOGP Life-Saving Rules, confined space entry,
-                    hot work requirements, energy isolation, working at height.
-                </div>
-            </div>
-            <div class="capability-card">
-                <div class="capability-card-title">📊 Process Safety KPIs</div>
-                <div class="capability-card-desc">
-                    Tier 1 and Tier 2 process safety events, LOPC definitions,
-                    consequence thresholds, KPI measurement frameworks.
-                </div>
-            </div>
-            <div class="capability-card">
-                <div class="capability-card-title">⚙️ Equipment Specifications</div>
-                <div class="capability-card-desc">
-                    JIP33 S-737 deluge skids, S-717 noise equipment,
-                    S-719 water mist fire protection — technical and quality requirements.
-                </div>
-            </div>
-            <div class="capability-card">
-                <div class="capability-card-title">🇮🇩 Bahasa Indonesia</div>
-                <div class="capability-card-desc">
-                    Tanya dalam Bahasa Indonesia. Sistem mendeteksi bahasa
-                    otomatis dan menjawab dalam bahasa yang sama.
-                </div>
-            </div>
-        </div>
+        <div class="capability-grid">{cards_html}</div>
         <div class="empty-hint">← Click a sample question or type below to start</div>
     </div>
     """, unsafe_allow_html=True)
