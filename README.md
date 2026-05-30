@@ -2,7 +2,7 @@
 
 > AI solutions across the upstream oil & gas value chain — from procurement intelligence to EPCI project controls and field operations automation.
 
-Built by **Nadya Boyke Pribadi** — AI Solution Architect specializing in upstream O&G digitalization.
+Built by **Nadya Boyke Pribadi** 
 
 [![GitHub](https://img.shields.io/badge/GitHub-nadyapribadi-blue)](https://github.com/nadyapribadi)
 
@@ -127,5 +127,3 @@ streamlit run demo1_doc_intelligence/src/app.py
 See [`/docs/architecture/`](./docs/architecture/) — Mermaid diagrams for each demo pipeline.
 
 ---
-
-*Built as a pre-bootcamp portfolio. November 2026 — Purwadhika AI Engineering bootcamp.*
