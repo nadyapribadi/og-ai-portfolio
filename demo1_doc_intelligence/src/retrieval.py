@@ -121,6 +121,9 @@ def load_vectorstore(lang):
 
 
 def search_chunks(vectorstore, question):
+    from sentence_transformers import CrossEncoder
+
+    # Step 1 — fetch broad candidate set via MMR
     seen_ids = set()
     all_chunks = []
 
@@ -129,16 +132,30 @@ def search_chunks(vectorstore, question):
 
     for variant in variants:
         results = vectorstore.max_marginal_relevance_search(
-            variant, k=TOP_K + 2, fetch_k=20
+            variant, k=TOP_K + 4, fetch_k=30
         )
         for r in results:
-            if r.metadata.get("page", 99) > 0:
-                doc_id = f"{r.metadata.get('source_file')}_{r.metadata.get('page')}_{r.page_content[:50]}"
+            if len(r.page_content.strip()) >= 100:
+                doc_id = (
+                    f"{r.metadata.get('source_file')}_"
+                    f"{r.metadata.get('page')}_"
+                    f"{r.page_content[:50]}"
+                )
                 if doc_id not in seen_ids:
                     seen_ids.add(doc_id)
                     all_chunks.append(r)
 
-    return all_chunks[:TOP_K * 2]
+    if not all_chunks:
+        return []
+
+    # Step 2 — rerank with cross-encoder
+    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    pairs = [[question, chunk.page_content] for chunk in all_chunks]
+    scores = reranker.predict(pairs)
+
+    # Sort by score, return top 6
+    ranked = sorted(zip(scores, all_chunks), key=lambda x: x[0], reverse=True)
+    return [chunk for _, chunk in ranked[:6]]
 
 
 def build_context(chunks):
