@@ -149,6 +149,10 @@ def build_chunks(pages, count_tokens, target_tokens):
                         "clause_id": clause.clause_id,
                         "section": clause.section,
                         "title": clause.title,
+                        # The effective heading: a bare sub-clause has no title
+                        # of its own and inherits its parent's. Keyword search
+                        # over headings depends on this being populated.
+                        "heading": clause.title or clause.parent_title,
                         "page": page,
                     },
                 )

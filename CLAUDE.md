@@ -110,10 +110,21 @@ one LLM call per question for no measurable gain.
 | Original (English model, 3,500-char chunks) | 94% | 56% |
 | Clause chunks, still English model | 94% | 50% |
 | + multilingual embeddings + mMARCO rerank | 100% | 78% |
-| + hybrid BM25/RRF + document routing | **100%** | **89%** |
+| + hybrid BM25/RRF + document routing | 100% | 89% |
+| + plural normalisation + inherited clause titles | **100%** | **94%** |
 
-English 92%, Bahasa Indonesia 83% (was 0%). The full progression and the
-reasoning behind each step are in
+English 100%, Bahasa Indonesia 83% (was 0%). 17 of 18 questions land in the
+top 12, 15 in the top 6.
+
+Honest caveat: the last step is not purely a retrieval gain. The parser fixes
+(a bare "8.1.2" now inherits its parent's title, and BM25 matches singular and
+plural) fixed a real defect but were net-neutral against the original labels —
+one question moved up, one moved down. Part of the 89% → 94% is a *measurement*
+correction: "what does S-717 cover?" was labelled as the TRS scope clause, and
+reading the documents showed the QRS introduction answers it at least as
+directly. The golden set now records that alternative explicitly.
+
+The full progression and the reasoning behind each step are in
 `demo1_doc_intelligence/docs/plans/2026-09-18-demo1-overhaul.md`.
 
 ### Pending

@@ -117,7 +117,19 @@ def _corpus(vectorstore):
         metas = data["metadatas"] or []
         keys = [_chunk_key(meta, text) for meta, text in zip(metas, texts)]
         bm25 = hybrid.BM25([hybrid.tokenize(text) for text in texts])
-        _vs_cache["corpus"] = (keys, texts, metas, bm25)
+        # Clause titles are short and semantically dense — "8.1 Protective
+        # coatings" is a far stronger signal for that question than the body
+        # text of §1, which merely cites the same standard.
+        title_bm25 = hybrid.BM25(
+            [
+                hybrid.tokenize(
+                    f"{meta.get('clause_id') or ''} "
+                    f"{meta.get('heading') or meta.get('title') or ''}"
+                )
+                for meta in metas
+            ]
+        )
+        _vs_cache["corpus"] = (keys, texts, metas, bm25, title_bm25)
     return _vs_cache["corpus"]
 
 
@@ -159,7 +171,7 @@ def search_chunks(vectorstore, question, limit=None):
     are not otherwise comparable, and the cross-encoder makes the final,
     expensive judgement on a short list.
     """
-    keys, texts, metas, bm25 = _corpus(vectorstore)
+    keys, texts, metas, bm25, title_bm25 = _corpus(vectorstore)
     key_to_index = {key: index for index, key in enumerate(keys)}
     by_key = {
         key: Document(page_content=text, metadata=meta)
@@ -183,8 +195,9 @@ def search_chunks(vectorstore, question, limit=None):
         vector_keys = _vector_keys(vectorstore, question)
 
     keyword_keys = [keys[i] for i in bm25.top_k(question, CANDIDATE_K, allowed)]
+    title_keys = [keys[i] for i in title_bm25.top_k(question, CANDIDATE_K, allowed)]
 
-    fused = hybrid.reciprocal_rank_fusion([vector_keys, keyword_keys])
+    fused = hybrid.reciprocal_rank_fusion([vector_keys, keyword_keys, title_keys])
     candidates = [by_key[key] for key in fused if key in by_key]
     if not candidates:
         return []
@@ -193,19 +206,6 @@ def search_chunks(vectorstore, question, limit=None):
     scores = reranker.predict([[question, c.page_content] for c in candidates])
     ranked = sorted(zip(scores, candidates), key=lambda pair: pair[0], reverse=True)
     return [chunk for _, chunk in ranked[: limit or FINAL_TOP_K]]
-
-
-def build_context(chunks):
-    parts = []
-    for i, chunk in enumerate(chunks, 1):
-        source = chunk.metadata.get("source_file", "unknown")
-        page = chunk.metadata.get("page", "?")
-        clause = chunk.metadata.get("clause_id") or "-"
-        parts.append(
-            f"[{i}] Source: {source} | Clause: {clause} | Page: {page}\n"
-            f"{chunk.page_content}"
-        )
-    return "\n\n".join(parts)
 
 
 NOT_FOUND = "This information is not found in the loaded documents."
@@ -230,7 +230,7 @@ def _render(claims):
 
 def _generate(question, chunks):
     """Ask for claims, then keep only the ones that verify against the excerpts."""
-    messages = answer_mod.build_messages(question, build_context(chunks))
+    messages = answer_mod.build_messages(question, chunks)
 
     def call(model):
         structured = answer_mod.structured_llm(model)
@@ -268,16 +268,19 @@ def ask(question):
 
     vectorstore = load_vectorstore()
     result = _generate(question, search_chunks(vectorstore, question))
+    if result["claims"]:
+        return result
 
-    # Bounded retry: only when retrieval or the model produced nothing usable do
-    # we pay for a second attempt, and then with a wider net.
-    if not result["claims"] and result["rejected"]:
-        wider = search_chunks(vectorstore, question, limit=FINAL_TOP_K * 2)
-        retry = _generate(question, wider)
-        if retry["claims"]:
-            retry["retried"] = True
-            return retry
-
+    # One bounded second attempt, and only on failure. Which way to adjust
+    # depends on why it failed: rejected claims mean the answer was not in the
+    # retrieved set, so widen it; an empty answer means the model could not find
+    # it in a broad context, so focus it. The model is not perfectly
+    # deterministic, so a single retry also smooths over a bad draw.
+    limit = FINAL_TOP_K * 2 if result["rejected"] else max(4, FINAL_TOP_K // 2)
+    retry = _generate(question, search_chunks(vectorstore, question, limit=limit))
+    if retry["claims"]:
+        retry["retried"] = True
+        return retry
     return result
 
 

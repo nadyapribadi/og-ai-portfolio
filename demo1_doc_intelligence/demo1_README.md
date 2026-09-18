@@ -13,10 +13,14 @@ retrieval only, `eval/run_eval.py`:
 | Metric | Result |
 |---|---|
 | Right document retrieved | 100% |
-| Right page retrieved (@6 / @12) | 78% / 89% |
-| English pages | 92% |
+| Right page retrieved (@6 / @12) | 83% / 94% |
+| English pages | 100% |
 | Bahasa Indonesia pages | 83% |
 | Citation validity, verified answers | 100% (14 claims) |
+
+One question out of 18 still misses: the Bahasa Indonesian phrasing of "what
+are the life saving rules?" retrieves the right document but the foreword page
+rather than the page that lists the rules. Everything else lands.
 
 | File | What it does |
 |------|--------------|

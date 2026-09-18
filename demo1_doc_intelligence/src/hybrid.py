@@ -17,7 +17,22 @@ TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9\-.]*")
 
 
 def tokenize(text):
-    return TOKEN_RE.findall(text.lower())
+    """Tokens, with a conservative singular form added alongside each plural.
+
+    BM25 has no stemming, so "coating" and "coatings" were different terms —
+    which is exactly why "protective coating requirements" failed to match the
+    clause titled "Protective coatings". Both forms are indexed, so exact
+    matches still work and plurals stop being a trap.
+    """
+    tokens = TOKEN_RE.findall(text.lower())
+    expanded = []
+    for token in tokens:
+        expanded.append(token)
+        # Skip short words ("gas") and words already ending in a double s
+        # ("class"), where dropping the s invents a different word.
+        if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+            expanded.append(token[:-1])
+    return expanded
 
 
 class BM25:

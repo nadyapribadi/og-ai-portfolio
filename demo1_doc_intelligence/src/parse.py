@@ -36,6 +36,10 @@ class Clause:
     clause_id: str
     section: str
     title: str
+    # Nearest titled ancestor. A bare "8.1.2" on its own line carries no title
+    # of its own, so without this its chunk loses the context that makes it
+    # findable — "Protective coatings" lived only on the "8.1" heading.
+    parent_title: str = ""
     # (page, line) pairs. Keeping the page per line — rather than one page per
     # clause — is what makes citations land on the page the text is actually
     # printed on: a clause heading can start on one page and run onto the next.
@@ -54,11 +58,12 @@ class Clause:
         bits = [self.source_file]
         if self.clause_id:
             label = f"§{self.clause_id}"
-            if self.title:
-                label += f" {self.title}"
+            heading = self.title or self.parent_title
+            if heading:
+                label += f" {heading}"
             bits.append(label)
-        elif self.title:
-            bits.append(self.title)
+        elif self.title or self.parent_title:
+            bits.append(self.title or self.parent_title)
         bits.append(f"p.{self.page if page is None else page}")
         return "[" + " | ".join(bits) + "]"
 
@@ -206,6 +211,7 @@ def split_into_clauses(pages):
     clauses = []
     current = None
     seen_ids = set()
+    titles = {}
     current_doc = None
 
     def close():
@@ -222,6 +228,7 @@ def split_into_clauses(pages):
             # Clause numbering is per document — never let one document's ids
             # validate another's bare sub-clause numbers.
             seen_ids = set()
+            titles = {}
             current_doc = page.source_file
         family, role = describe_document(page.source_file)
         for line in page.text.split("\n"):
@@ -231,6 +238,17 @@ def split_into_clauses(pages):
                 clause_id, title = heading
                 if clause_id:
                     seen_ids.add(clause_id)
+                    if title:
+                        titles[clause_id] = title
+                parent_title = ""
+                if not title and clause_id:
+                    # Walk up: 8.1.2 → 8.1 → 8
+                    segments = clause_id.split(".")
+                    for depth in range(len(segments) - 1, 0, -1):
+                        ancestor = ".".join(segments[:depth])
+                        if ancestor in titles:
+                            parent_title = titles[ancestor]
+                            break
                 current = Clause(
                     source_file=page.source_file,
                     doc_family=family,
@@ -238,6 +256,7 @@ def split_into_clauses(pages):
                     clause_id=clause_id,
                     section=parent_of(clause_id),
                     title=title,
+                    parent_title=parent_title,
                 )
                 continue
             if current is None:

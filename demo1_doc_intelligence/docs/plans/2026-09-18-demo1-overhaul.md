@@ -103,8 +103,36 @@ Conclusions:
 Verified end-to-end: "Apa saja aturan keselamatan jiwa menurut IOGP?" now
 retrieves 459.pdf clauses and answers in Bahasa Indonesia with all nine rules.
 
-Remaining known miss: "protective coating requirements" surfaces TRS §1–2 (which
-cite ISO 12944) rather than §8.1, the section that states the requirement.
+### Phase 1 follow-up — parser and measurement fixes
+
+Two defects surfaced while chasing one failing question:
+
+1. **A bare sub-clause lost its title.** "8.1 Protective coatings" is a heading;
+   "8.1.1" and "8.1.2" follow as bare numbers. Their chunks carried no heading
+   at all, so the clause that states the coating requirement was unfindable by
+   heading. `Clause` now inherits the nearest titled ancestor and ingest stores
+   an effective `heading` field.
+2. **BM25 had no stemming.** "coating" and "coatings" were different terms, so a
+   question about coating requirements could not match a clause titled
+   "Protective coatings". `hybrid.tokenize` now emits the singular alongside
+   each plural (conservatively: not for short words or words ending in "ss").
+
+Together these fixed "protective coating requirements" (now retrieved at rank 9
+instead of never). They were **net-neutral on the aggregate** against the
+original labels — one question fixed, one displaced — so the honest headline
+under the original labels remains 89%.
+
+The set is now at **94% @12 / 83% @6**, of which part is a measurement
+correction: `en-11` ("what does S-717 cover?") accepted only the TRS scope
+clause, but reading the documents showed the QRS introduction and scope answer
+it at least as directly. `golden.yaml` records that with an explicit
+`also_accept`, checked by hand rather than adjusted to make a number move.
+
+Remaining known miss: the Bahasa Indonesian phrasing of "what are the life
+saving rules?" retrieves 459.pdf but the foreword page rather than the page
+listing the rules. This is a genuine multilingual ranking gap — the Indonesian
+question does not lexically overlap the English rule names, and the English-only
+title signal cannot bridge it.
 
 ### Phase 1.1 — baseline (measured 2026-09-18, before any change)
 
@@ -168,6 +196,15 @@ Note: zero fabrications *caught* means the model behaved on these four — it do
 not by itself prove the guardrail works. The unit tests in `tests/test_answer.py`
 are what cover that, with a fabricated page number and a fabricated quote.
 
+**Follow-up — answer variance.** Re-running the flagship question occasionally
+returned zero claims even though the rules page was retrieved: the model is not
+perfectly deterministic, and on a broad 12-chunk context it sometimes reports
+that nothing was found. `retrieval.ask()` now makes one bounded second attempt
+on failure — narrowing the context when the answer was reported absent, and
+widening it when claims were rejected for citing something not retrieved. Across
+three consecutive live runs the question answered every time (9, 1 and 10 claims
+— the count itself varies, which is a known limitation of the current prompt).
+
 ## Phase 3 — Make it durable
 
 Exit criteria: CI green on a fresh clone; no model ID outside config; live demo link.
@@ -181,6 +218,18 @@ Exit criteria: CI green on a fresh clone; no model ID outside config; live demo 
 - [x] 3.7 Bundled sample corpus + markdown support + index-on-first-run
 - [x] 3.8 README / CLAUDE.md / demo1_README updated with measured numbers
 - [ ] 3.9 Push and deploy — **needs you** (credentials)
+
+Also added in this pass:
+
+- **Prompt-injection hardening.** Retrieved text is now wrapped in
+  `<untrusted_source>` tags with an explicit instruction that anything inside is
+  data and never an instruction. This matters the moment documents come from a
+  user rather than the operator.
+- **A UI test** (`tests/test_app.py`) using Streamlit's own `AppTest` harness, so
+  a crash on first render fails the build rather than the first visitor. No
+  browser needed.
+- **The eval harness no longer dies on a single API error** — it reports the
+  failure per question and continues.
 
 ### Phase 3 notes
 

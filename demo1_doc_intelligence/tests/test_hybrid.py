@@ -15,6 +15,25 @@ def test_tokenizer_keeps_document_codes_intact():
     assert "12944-4" in hybrid.tokenize("coating to ISO 12944-4")
 
 
+def test_tokenizer_matches_singular_and_plural():
+    """BM25 has no stemmer, so "coating" must match a clause titled "coatings"."""
+    assert "coating" in hybrid.tokenize("protective coatings")
+    assert "coatings" in hybrid.tokenize("protective coatings")
+    assert "rule" in hybrid.tokenize("life saving rules")
+    # Short words and double-s words must not be mangled.
+    assert hybrid.tokenize("gas") == ["gas"]
+    assert hybrid.tokenize("class") == ["class"]
+
+
+def test_bm25_matches_across_number():
+    corpus = [
+        hybrid.tokenize("noise emitting equipment"),
+        hybrid.tokenize("protective coatings"),
+    ]
+    bm25 = hybrid.BM25(corpus)
+    assert bm25.top_k("protective coating", 2) == [1]
+
+
 def test_bm25_ranks_the_matching_document_first():
     corpus = [
         hybrid.tokenize("deluge skid design requirements"),

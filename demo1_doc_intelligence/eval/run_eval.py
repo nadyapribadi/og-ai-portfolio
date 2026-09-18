@@ -44,27 +44,37 @@ def evaluate(questions, expand=True):
             (c.metadata.get("source_file"), c.metadata.get("page")) for c in chunks
         ]
 
-        expected_file = item["expected_file"]
-        expected_pages = item.get("expected_pages") or []
+        # A question can legitimately be answered from more than one place —
+        # "what does S-717 cover?" is answered as directly by the QRS scope
+        # statement as by the TRS one. `also_accept` records alternatives that
+        # were checked by hand against the document text.
+        accepted = [
+            (item["expected_file"], item.get("expected_pages") or [])
+        ] + [
+            (alt["file"], alt.get("pages") or [])
+            for alt in item.get("also_accept") or []
+        ]
 
-        doc_rank = next(
-            (i for i, (f, _) in enumerate(got, 1) if f == expected_file), None
-        )
-        page_rank = next(
-            (
-                i
-                for i, (f, p) in enumerate(got, 1)
-                if f == expected_file and (not expected_pages or p in expected_pages)
-            ),
-            None,
-        )
+        def matches(ranked, check_pages):
+            for i, (f, p) in enumerate(ranked, 1):
+                for accepted_file, accepted_pages in accepted:
+                    if f != accepted_file:
+                        continue
+                    if check_pages and accepted_pages and p not in accepted_pages:
+                        continue
+                    return i
+            return None
+
+        doc_rank = matches([(f, None) for f, _ in got], check_pages=False)
+        page_rank = matches(got, check_pages=True)
 
         rows.append(
             {
                 "id": item["id"],
                 "question": item["question"],
-                "expected_file": expected_file,
-                "expected_pages": expected_pages,
+                "expected_file": item["expected_file"],
+                "expected_pages": item.get("expected_pages") or [],
+                "accepted": accepted,
                 "doc_hit": doc_rank is not None,
                 "page_hit": page_rank is not None,
                 "doc_rr": 1 / doc_rank if doc_rank else 0.0,
@@ -100,14 +110,19 @@ def main():
     def rate(key, top=None):
         hits = 0
         for r in rows:
-            want_file, want_pages = r["expected_file"], r["expected_pages"]
             got = r["retrieved"][:top] if top else r["retrieved"]
             if key == "doc":
-                ok = any(f == want_file for f, _ in got)
+                ok = any(
+                    f == accepted_file
+                    for f, _ in got
+                    for accepted_file, _pages in r["accepted"]
+                )
             else:
                 ok = any(
-                    f == want_file and (not want_pages or p in want_pages)
+                    f == accepted_file
+                    and (not accepted_pages or p in accepted_pages)
                     for f, p in got
+                    for accepted_file, accepted_pages in r["accepted"]
                 )
             hits += ok
         return hits / len(rows)
@@ -147,7 +162,11 @@ def report_groundedness(questions):
     accepted_total = rejected_total = answered = 0
     print("\n=== answer groundedness ===")
     for item in questions:
-        result = retrieval.ask(item["question"])
+        try:
+            result = retrieval.ask(item["question"])
+        except Exception as exc:                    # rate limits, network, ...
+            print(f"  {item['id']:6s} ERROR {type(exc).__name__}: {str(exc)[:70]}")
+            continue
         accepted_total += len(result["claims"])
         rejected_total += len(result["rejected"])
         answered += bool(result["claims"])

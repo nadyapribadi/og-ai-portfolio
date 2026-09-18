@@ -35,6 +35,16 @@ def test_bare_sub_clause_needs_a_seen_parent():
     assert "7.2.1" in ids
 
 
+def test_bare_sub_clause_inherits_the_parent_title():
+    """'8.1.2' has no heading of its own; without the parent title its chunk
+    loses the context that makes it findable."""
+    pages = [page(1, "8.1 Protective coatings\n8.1.1\nShall follow ISO 12944-4.\n")]
+    clause = next(c for c in parse.split_into_clauses(pages) if c.clause_id == "8.1.1")
+    assert clause.title == ""
+    assert clause.parent_title == "Protective coatings"
+    assert "Protective coatings" in clause.context()
+
+
 def test_reference_number_is_not_a_clause():
     """'29 CFR 1910.147' used to be parsed as clause 1910.147 and swallow a whole section."""
     pages = [page(1, "1910.147\nSome body text about OSHA rules.\n")]

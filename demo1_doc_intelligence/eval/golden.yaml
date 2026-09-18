@@ -77,6 +77,12 @@ questions:
     question: "What does IOGP S-717 cover?"
     expected_file: "S-717v2025-03 TRS.pdf"
     expected_pages: [8]
+    # Verified by reading both: the QRS introduction and scope state plainly
+    # what the specification covers, and answer the question at least as
+    # directly as the TRS scope clause does.
+    also_accept:
+      - file: "S-717Qv2020-06 QRS.pdf"
+        pages: [5, 6]
 
   - id: en-12
     lang: en
