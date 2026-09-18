@@ -6,6 +6,7 @@ language the user writes — the embedding model is multilingual, so there is no
 translation step and no language detection to get wrong.
 """
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -55,6 +56,58 @@ _model_check_done = False
 
 # Below this many routed candidates we fall back to searching everything.
 MIN_ROUTED_CANDIDATES = 3
+
+# Questions about the assistant itself, not about the documents. No excerpt
+# answers "what can you do?", so the model returned "not found" — the answer
+# that makes a working demo look broken, on the first thing many visitors type.
+# These are answered from configuration instead: deterministically, in both
+# languages, and without spending a token.
+#
+# The patterns are deliberately narrow. "apa saja yg akan dicek di sini?" is a
+# real document question (it asks what gets inspected) and must keep going to
+# retrieval, so a Bahasa match requires a capability verb — bisa, tanya,
+# ditanyakan, dibahas — not just "apa saja".
+CAPABILITY_QUESTION = re.compile(
+    r"(what can (you|i)\b"
+    r"|what (questions|topics)\b"
+    r"|what (does|is) this (app|demo|chat|tool)\b"
+    r"|how do i use\b"
+    r"|what are you able\b"
+    r"|apa (saja )?(yang )?bisa\b"
+    r"|bisa (ditanyakan|ditanya|dibahas|dicek apa)\b"
+    r"|topik apa\b)",
+    re.IGNORECASE,
+)
+
+
+def is_capability_question(question):
+    """Is this about the assistant, rather than about the documents?"""
+    return bool(CAPABILITY_QUESTION.search(question or ""))
+
+
+def capability_answer():
+    """What this app can answer, assembled from the configuration that is
+    already driving the sidebar and the front page."""
+    from config import SOURCE_FRIENDLY, corpus_content
+
+    questions, cards, _subtitle = corpus_content(corpus_families())
+    documents = ", ".join(SOURCE_FRIENDLY.get(name, name) for name in corpus_sources())
+    lines = [
+        f"I answer only from the documents indexed here: {documents}.",
+        "In scope: " + "; ".join(card["title"] for card in cards) + ".",
+        "",
+        "Questions that work:",
+    ]
+    for category, items in questions.items():
+        lines.append(f"  {category}")
+        lines.extend(f"    • {item}" for item in items)
+    lines += [
+        "",
+        "Saya hanya menjawab dari dokumen itu — kalau jawabannya tidak ada di "
+        "sana, saya bilang tidak ketemu, bukan mengarang.",
+    ]
+    return "\n".join(lines)
+
 
 # How much of the fused list late interaction rewrites. MaxSim needs every
 # candidate's token vectors, so the pool is what the rerank costs in memory and
@@ -369,6 +422,16 @@ def _generate(question, chunks):
 def ask(question):
     """Answer with citations that the system verified, not ones it was asked for."""
     global _model_check_done
+    if is_capability_question(question):
+        return {
+            "answer": capability_answer(),
+            "claims": [],
+            "rejected": [],
+            "not_found": False,
+            "sources": corpus_sources(),
+            "clauses": [],
+            "chunks": [],
+        }
     if not _model_check_done:
         validate_models(strict=True)
         _model_check_done = True

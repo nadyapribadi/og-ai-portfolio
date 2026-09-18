@@ -71,6 +71,19 @@ def test_every_offered_question_is_answerable():
     )
 
 
+def test_what_can_i_ask_is_answered_without_the_model():
+    """No excerpt answers a question about the app, so the model said "not found".
+
+    It is answered from configuration instead — which also means this test needs
+    no API key.
+    """
+    result = retrieval.ask("apa saja yg bisa dibahas di chat ini?")
+    assert not result["not_found"]
+    assert "S-900Qv2026-01 QRS.md" in result["answer"]
+    assert "What pressure test is required and for how long?" in result["answer"]
+    assert result["claims"] == [], "a canned answer claims nothing from a document"
+
+
 @pytest.mark.parametrize("question,source,page,clause,quote", CASES)
 def test_question_retrieves_its_own_answer(question, source, page, clause, quote):
     chunks = retrieval.search_chunks(retrieval.load_vectorstore("en"), question)

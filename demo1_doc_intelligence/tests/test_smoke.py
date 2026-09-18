@@ -42,6 +42,35 @@ def test_content_to_text_handles_every_provider_shape():
     assert retrieval._content_to_text(42) == "42"
 
 
+def test_only_questions_about_the_assistant_are_treated_as_such():
+    """A capability answer is canned, so it must not swallow document questions.
+
+    "apa saja yg akan dicek di sini?" is a real question about inspection in the
+    specification and has to keep going to retrieval; "apa saja yg bisa dibahas
+    di chat ini?" is about the assistant and has no excerpt to retrieve.
+    """
+    about_the_app = [
+        "apa saja yg bisa dibahas di chat ini?",
+        "apa yang bisa ditanyakan?",
+        "bisa dibahas apa saja?",
+        "What can you do?",
+        "what questions can I ask?",
+        "what is this app?",
+        "topik apa yang tersedia?",
+    ]
+    about_the_documents = [
+        "apa saja yg akan dicek di sini?",
+        "apa yang harus disiapkan sebelum pengujian tekanan?",
+        "What pressure test is required and for how long?",
+        "What is the minimum design pressure for the deluge skid?",
+        "Apa persyaratan desain deluge skid?",
+    ]
+    for question in about_the_app:
+        assert retrieval.is_capability_question(question), question
+    for question in about_the_documents:
+        assert not retrieval.is_capability_question(question), question
+
+
 def test_vectorstore_path_is_configurable(monkeypatch):
     """Deployments and model bake-offs relocate the index via environment."""
     assert isinstance(config.VECTORSTORE_DIR, Path)
