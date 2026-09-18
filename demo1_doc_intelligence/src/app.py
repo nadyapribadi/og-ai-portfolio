@@ -372,7 +372,8 @@ def get_vectorstore():
     # A fresh clone has no index. Build one from whatever documents exist
     # instead of failing — that is what makes the demo portable across hosts.
     import ingest
-    ingest.ensure_vectorstore()
+    with st.spinner("Building the document index — first run only, ~1 minute..."):
+        ingest.ensure_vectorstore()
     return load_vectorstore("en")
 
 
@@ -529,12 +530,11 @@ try:
     chunk_count = vectorstore._collection.count()
     doc_count = len(DOCUMENT_SOURCES)
 except Exception:
-    st.error(
-        "**Document index not found.**\n\n"
-        "Run ingest first:\n"
-        "```\npython demo1_doc_intelligence/src/ingest.py\n```\n\n"
-        "Then restart the app."
-    )
+    # The index is built on first run, so reaching here means the build itself
+    # failed. Show the real traceback instead of a hint that hides it — that is
+    # the only way to diagnose this on a host you cannot shell into.
+    st.error("**Could not load or build the document index.**")
+    st.exception(sys.exc_info()[1])
     st.stop()
 
 # Header with index stats

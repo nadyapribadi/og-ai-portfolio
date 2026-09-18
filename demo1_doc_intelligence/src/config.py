@@ -1,12 +1,36 @@
 import os
+import tempfile
 from pathlib import Path
 
 # ─────────────────────────────────────────────
 # Paths
 # ─────────────────────────────────────────────
 DEMO_ROOT      = Path(__file__).resolve().parent.parent
+
+
+def _default_vectorstore():
+    """Prefer the repo's data directory, fall back to a writable temp path.
+
+    Hosted platforms mount the repository read-only, so building the index
+    inside it fails. Writing to a temp directory instead is what lets the same
+    code run locally and on Streamlit Cloud without a committed index.
+    """
+    preferred = DEMO_ROOT / "data" / "vectorstore_en"
+    candidates = [preferred, Path(tempfile.gettempdir()) / "demo1_vectorstore_en"]
+    for candidate in candidates:
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            probe = candidate.parent / ".write_probe"
+            probe.touch()
+            probe.unlink()
+            return candidate
+        except OSError:
+            continue
+    return preferred
+
+
 VECTORSTORE_DIR = Path(
-    os.getenv("DEMO1_VECTORSTORE", DEMO_ROOT / "data" / "vectorstore_en")
+    os.getenv("DEMO1_VECTORSTORE") or _default_vectorstore()
 )
 
 # Where documents are read from. The real corpus (raw_docs) wins whenever it
