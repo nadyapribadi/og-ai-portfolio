@@ -1,0 +1,19 @@
+# Streamlit runtime configuration for the deployed app.
+
+[server]
+# Turn the file watcher off.
+#
+# Streamlit's watcher walks every imported module to decide what to reload.
+# With `transformers` in the dependency tree that means importing thousands of
+# optional model modules, each of which needs torchvision and fails without it.
+# The deployed log filled with hundreds of repeated ModuleNotFoundError
+# tracebacks — enough to slow startup and bury the real error underneath.
+# Nothing here needs live reload in production.
+fileWatcherType = "none"
+
+[browser]
+gatherUsageStats = false
+
+[client]
+# Show full tracebacks in the browser, not just "Error running app".
+showErrorDetails = "full"
