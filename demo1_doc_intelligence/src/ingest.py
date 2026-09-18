@@ -179,7 +179,10 @@ def build_index():
     """Run the whole pipeline. Returns the number of chunks indexed."""
     print("=== Step 1: extract pages ===")
     pages = load_pages()
-    print(f"  {len(pages)} pages from {len({p.source_file for p in pages})} PDFs")
+    print(
+        f"  {len(pages)} pages from "
+        f"{len({p.source_file for p in pages})} documents"
+    )
 
     print("\n=== Step 2: embedding window ===")
     window = embedding_window()

@@ -92,6 +92,35 @@ python -m pytest demo1_doc_intelligence/tests -q
 
 ---
 
+## Deploy Demo 1
+
+Nothing has to be committed to deploy: the app builds its index on first run
+from whatever documents are present, starting with the bundled sample corpus.
+
+**Streamlit Community Cloud** — free, and the natural host for a Streamlit app:
+
+1. [share.streamlit.io](https://share.streamlit.io) → *New app* → pick this repo
+   and branch.
+2. **Main file path:** `demo1_doc_intelligence/src/app.py`
+3. **Advanced settings → Secrets:**
+   ```toml
+   GROQ_API_KEY = "gsk_your_key_here"
+   ```
+4. Deploy.
+
+The root `requirements.txt` exists only as a deployment shim — Streamlit Cloud
+looks for it at the repository root, while each demo keeps its own dependencies
+inside its own folder.
+
+The first load takes a minute or two: it downloads the embedding model (~470 MB)
+and builds the index, both cached for the life of the container.
+
+**Not Netlify.** Streamlit needs a long-running Python process and a WebSocket
+per user; Netlify serves static files and short-lived functions. Netlify is the
+right home for a portfolio landing page that links to the demo.
+
+---
+
 ## Stack
 
 LangChain · ChromaDB · Groq LLaMA 3.3 70B · sentence-transformers · pdfplumber · Streamlit · N8N

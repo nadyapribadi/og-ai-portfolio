@@ -21,6 +21,14 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# Streamlit Cloud stores secrets in st.secrets; the pipeline reads os.environ.
+# Bridge the two so the same code runs locally (demo1/.env) and hosted.
+try:
+    for _key, _value in st.secrets.items():
+        os.environ.setdefault(_key, str(_value))
+except Exception:
+    pass          # no secrets configured — local .env is used instead
+
 # ─────────────────────────────────────────────
 # CSS
 # ─────────────────────────────────────────────

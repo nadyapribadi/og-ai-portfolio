@@ -1,0 +1,9 @@
+# Deployment shim — not a dependency list.
+#
+# Each demo owns its own dependencies (demo1's live in
+# demo1_doc_intelligence/requirements.txt) so the demos stay independent.
+# Streamlit Community Cloud only looks for requirements.txt at the repository
+# root, so this one line forwards to the demo that is actually deployed.
+#
+# Deploying a different demo? Point this at that demo's requirements instead.
+-r demo1_doc_intelligence/requirements.txt
