@@ -11,11 +11,15 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
+from langchain_core.documents import Document
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 sys.path.insert(0, str(Path(__file__).parent))
+import hybrid  # noqa: E402
+import routing  # noqa: E402
 from config import (  # noqa: E402
+    CANDIDATE_K,
     COLLECTION_NAME,
     EMBED_MODEL,
     FINAL_TOP_K,
@@ -82,6 +86,9 @@ Document excerpts:
 _vs_cache = {}
 _reranker = None
 _model_check_done = False
+
+# Below this many routed candidates we fall back to searching everything.
+MIN_ROUTED_CANDIDATES = 3
 
 
 def _content_to_text(content):
@@ -159,25 +166,90 @@ def get_reranker():
     return _reranker
 
 
-def search_chunks(vectorstore, question):
-    """Retrieve a broad candidate set, then rerank it down to FINAL_TOP_K."""
-    seen_ids = set()
-    candidates = []
-
-    results = vectorstore.max_marginal_relevance_search(
-        question, k=FINAL_TOP_K * 2, fetch_k=50
+def _chunk_key(meta, text):
+    return (
+        f"{meta.get('source_file')}|{meta.get('page')}|"
+        f"{meta.get('clause_id')}|{text[:40]}"
     )
-    for result in results:
-        doc_id = (
-            f"{result.metadata.get('source_file')}_"
-            f"{result.metadata.get('page')}_"
-            f"{result.metadata.get('clause_id')}_"
-            f"{result.page_content[:40]}"
-        )
-        if doc_id not in seen_ids:
-            seen_ids.add(doc_id)
-            candidates.append(result)
 
+
+def _corpus(vectorstore):
+    """Load the whole index once so keyword search can run in memory."""
+    if "corpus" not in _vs_cache:
+        data = vectorstore.get(include=["documents", "metadatas"])
+        texts = data["documents"] or []
+        metas = data["metadatas"] or []
+        keys = [_chunk_key(meta, text) for meta, text in zip(metas, texts)]
+        bm25 = hybrid.BM25([hybrid.tokenize(text) for text in texts])
+        _vs_cache["corpus"] = (keys, texts, metas, bm25)
+    return _vs_cache["corpus"]
+
+
+def _vector_keys(vectorstore, question, where=None):
+    """Keys of the vector-search hits, optionally filtered by metadata."""
+    try:
+        hits = vectorstore.similarity_search(
+            question, k=CANDIDATE_K, filter=where or None
+        )
+    except Exception:
+        # A filter the backend rejects must never lose the search entirely.
+        if not where:
+            raise
+        hits = vectorstore.similarity_search(question, k=CANDIDATE_K)
+    return [_chunk_key(hit.metadata, hit.page_content) for hit in hits]
+
+
+def _allowed_indices(metas, family, role):
+    """Corpus indices permitted by the inferred route, or None for no filter."""
+    if not family and not role:
+        return None
+    allowed = {
+        i
+        for i, meta in enumerate(metas)
+        if not family or meta.get("doc_family") == family
+    }
+    if role:
+        by_role = {i for i in allowed if metas[i].get("doc_role") == role}
+        if len(by_role) >= MIN_ROUTED_CANDIDATES:
+            allowed = by_role
+    return allowed if len(allowed) >= MIN_ROUTED_CANDIDATES else None
+
+
+def search_chunks(vectorstore, question):
+    """Route, retrieve with two strategies, fuse by rank, then rerank.
+
+    Each stage is a separate signal: routing narrows the corpus, BM25 catches
+    exact tokens, vector search catches meaning, RRF combines two rankings that
+    are not otherwise comparable, and the cross-encoder makes the final,
+    expensive judgement on a short list.
+    """
+    keys, texts, metas, bm25 = _corpus(vectorstore)
+    key_to_index = {key: index for index, key in enumerate(keys)}
+    by_key = {
+        key: Document(page_content=text, metadata=meta)
+        for key, text, meta in zip(keys, texts, metas)
+    }
+
+    family = routing.infer_family(question)
+    role = routing.infer_role(question)
+    allowed = _allowed_indices(metas, family, role)
+
+    vector_keys = _vector_keys(
+        vectorstore, question, where={"doc_family": family} if family else None
+    )
+    if allowed is not None:
+        vector_keys = [
+            key
+            for key in vector_keys
+            if key_to_index.get(key) in allowed
+        ]
+    if len(vector_keys) < MIN_ROUTED_CANDIDATES:
+        vector_keys = _vector_keys(vectorstore, question)
+
+    keyword_keys = [keys[i] for i in bm25.top_k(question, CANDIDATE_K, allowed)]
+
+    fused = hybrid.reciprocal_rank_fusion([vector_keys, keyword_keys])
+    candidates = [by_key[key] for key in fused if key in by_key]
     if not candidates:
         return []
 

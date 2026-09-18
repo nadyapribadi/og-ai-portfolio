@@ -154,5 +154,8 @@ RERANK_MODEL = os.getenv(
 # is what keeps the context budget comparable to before.
 FINAL_TOP_K         = 12
 
+# Candidates each retriever contributes before fusion and reranking.
+CANDIDATE_K         = 50
+
 # Chroma collection name — changing it forces a clean rebuild.
 COLLECTION_NAME     = "og_docs"
