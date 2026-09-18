@@ -345,20 +345,6 @@ div[data-testid="stAlert"] {
 # CONSTANTS — loaded from config.py
 # Edit config.py to customize for your documents
 # ─────────────────────────────────────────────
-LANG_FLAGS = {
-    "en": "🇬🇧 English",
-    "id": "🇮🇩 Bahasa Indonesia",
-    "ar": "🇸🇦 Arabic",
-    "ms": "🇲🇾 Malay",
-}
-
-LANG_OPTIONS = {
-    "Auto-detect": "auto",
-    "English": "en",
-    "Bahasa Indonesia": "id",
-}
-
-
 # ─────────────────────────────────────────────
 # SESSION STATE
 # ─────────────────────────────────────────────
@@ -366,8 +352,6 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
-if "lang_override" not in st.session_state:
-    st.session_state.lang_override = "auto"
 if "confirm_clear" not in st.session_state:
     st.session_state.confirm_clear = False
 
@@ -442,22 +426,6 @@ with st.sidebar:
     st.markdown('<div class="sidebar-label">📚 Document Sources</div>', unsafe_allow_html=True)
     for name in DOCUMENT_SOURCES:
         st.markdown(f'<div class="doc-item">{name}</div>', unsafe_allow_html=True)
-
-    st.divider()
-
-    # Language
-    st.markdown('<div class="sidebar-label">🌐 Language</div>', unsafe_allow_html=True)
-    lang_choice = st.selectbox(
-        "Language",
-        options=list(LANG_OPTIONS.keys()),
-        index=0,
-        label_visibility="collapsed",
-    )
-    st.session_state.lang_override = LANG_OPTIONS[lang_choice]
-    if st.session_state.lang_override != "auto":
-        st.caption(f"Override active: {lang_choice}")
-    else:
-        st.caption("Auto-detecting from your question")
 
     st.divider()
 
@@ -580,10 +548,6 @@ if not st.session_state.messages:
 # ── CHAT HISTORY ──
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
-        if msg["role"] == "assistant":
-            lang_display = LANG_FLAGS.get(msg.get("language", "en"), "🌐")
-            st.markdown(f'<span class="lang-badge">{lang_display}</span>', unsafe_allow_html=True)
-
         st.markdown(msg["content"])
 
         if msg["role"] == "assistant":
@@ -627,12 +591,8 @@ if question:
         )
 
         try:
-            result = ask(question, lang_override=st.session_state.lang_override)
+            result = ask(question)
             status_placeholder.empty()
-
-            # Language badge
-            lang_display = LANG_FLAGS.get(result["language"], f"🌐 {result['language']}")
-            st.markdown(f'<span class="lang-badge">{lang_display}</span>', unsafe_allow_html=True)
 
             # Stream answer
             st.write_stream(stream_text(result["answer"]))
@@ -652,7 +612,6 @@ if question:
                 "content": result["answer"],
                 "sources": result["sources"],
                 "chunks": result["chunks"],
-                "language": result["language"],
                 "id": new_msg_id,
             })
 

@@ -88,11 +88,28 @@ def main():
     rows = evaluate(load_golden(), expand=not args.no_expand)
     n = len(rows)
 
-    print(f"questions          {n}")
-    print(f"doc hit-rate@k     {sum(r['doc_hit'] for r in rows) / n:.0%}")
-    print(f"page hit-rate@k    {sum(r['page_hit'] for r in rows) / n:.0%}")
-    print(f"doc MRR            {sum(r['doc_rr'] for r in rows) / n:.3f}")
-    print(f"page MRR           {sum(r['page_rr'] for r in rows) / n:.3f}")
+    def rate(key, top=None):
+        hits = 0
+        for r in rows:
+            want_file, want_pages = r["expected_file"], r["expected_pages"]
+            got = r["retrieved"][:top] if top else r["retrieved"]
+            if key == "doc":
+                ok = any(f == want_file for f, _ in got)
+            else:
+                ok = any(
+                    f == want_file and (not want_pages or p in want_pages)
+                    for f, p in got
+                )
+            hits += ok
+        return hits / len(rows)
+
+    print(f"questions              {n}")
+    print(f"doc  hit-rate@6        {rate('doc', 6):.0%}")
+    print(f"page hit-rate@6        {rate('page', 6):.0%}")
+    print(f"doc  hit-rate@k        {rate('doc'):.0%}")
+    print(f"page hit-rate@k        {rate('page'):.0%}")
+    print(f"doc MRR                {sum(r['doc_rr'] for r in rows) / n:.3f}")
+    print(f"page MRR               {sum(r['page_rr'] for r in rows) / n:.3f}")
     print()
 
     for r in rows:

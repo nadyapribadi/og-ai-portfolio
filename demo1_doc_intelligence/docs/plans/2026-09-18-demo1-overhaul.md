@@ -59,15 +59,47 @@ multilingual embedding model.
 Exit criteria: measured increase in page hit-rate over the Phase 1.1 baseline.
 
 - [x] 1.1 Golden set + eval harness; record baseline **before** changing anything
-- [ ] 1.2 Document model: Document → Section → Clause
-- [ ] 1.3 Clause-level chunking with parent context prepended
-- [ ] 1.4 Metadata: `doc_family`, `doc_role`, `section`, `clause_id`, `page`
-- [ ] 1.5 Multilingual 512-token embedding model (chosen by eval, not assumption)
-- [ ] 1.6 Hybrid retrieval: BM25 ∥ vector → RRF → cached cross-encoder rerank
+- [x] 1.2 Document model: Document → Section → Clause
+- [x] 1.3 Clause-level chunking with parent context prepended
+- [x] 1.4 Metadata: `doc_family`, `doc_role`, `section`, `clause_id`, `page`
+- [x] 1.5 Multilingual 512-token embedding model (chosen by eval, not assumption)
+- [~] 1.6 Reranker cached and switched to multilingual; **BM25 hybrid + RRF still TODO**
 - [ ] 1.7 Routing: filter by document family / role before similarity search
-- [ ] 1.8 Re-run eval; gate at >85–90% page hit-rate
-- [ ] 1.9 Remove `deep_translator`, `langdetect`, dual store, `lang_override`,
+- [~] 1.8 Eval re-run: 78%, gate of 85–90% **not yet met**
+- [x] 1.9 Remove `deep_translator`, `langdetect`, dual store, `lang_override`,
       and query expansion if the numbers prove it is unnecessary
+
+### Phase 1 results — bake-off (18 questions, retrieval only, no expansion)
+
+| Configuration | doc hit | page hit@12 | EN page | ID page | page MRR |
+|---|---|---|---|---|---|
+| Baseline: English model, 3,500-char chunks | 94% | 56% | 75% | 17% | 0.444 |
+| English model + clause chunks | 94% | 50% | 75% | 0% | 0.394 |
+| e5-small + clause chunks, ms-marco rerank | 100% | 72% | 92% | 33% | 0.529 |
+| **e5-small + clause chunks, mMARCO rerank** | **100%** | **78%** | 83% | **67%** | **0.624** |
+
+Conclusions:
+
+1. **Chunking alone did not help.** Clause-level chunks scored *worse* than the
+   original big chunks (50% vs 56%) when paired with the English embedding
+   model. Size was necessary for citation accuracy but not sufficient for
+   ranking.
+2. **The embedding model was the real lever.** Swapping to a multilingual model
+   took page hit-rate from 50% to 72% and fixed the Bahasa path, which retrieved
+   the wrong page on every single question before.
+3. **The reranker matters for non-English.** The English-only ms-marco model
+   suppresses Bahasa queries; the multilingual mMARCO model trades 9 points of
+   English accuracy for 34 points of Bahasa, and lifts overall MRR 0.529 → 0.624.
+4. **Query expansion was removed.** It scored 56% with or without — one LLM call
+   per question for no measurable gain.
+
+Verified end-to-end: "Apa saja aturan keselamatan jiwa menurut IOGP?" now
+retrieves 459.pdf clauses and answers in Bahasa Indonesia with all nine rules.
+
+Still short of the 85–90% gate. The remaining gap is ranking, which is what
+1.6 (BM25 hybrid) and 1.7 (routing by document family) target. Two known
+specific misses: "protective coatings" returns the QRS instead of TRS §8.1, and
+"what are the rules" prefers the §3 implementation tables over §2.
 
 ### Phase 1.1 — baseline (measured 2026-09-18, before any change)
 

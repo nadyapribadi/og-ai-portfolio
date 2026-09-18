@@ -1,3 +1,14 @@
+import os
+from pathlib import Path
+
+# ─────────────────────────────────────────────
+# Paths
+# ─────────────────────────────────────────────
+DEMO_ROOT      = Path(__file__).resolve().parent.parent
+VECTORSTORE_DIR = Path(
+    os.getenv("DEMO1_VECTORSTORE", DEMO_ROOT / "data" / "vectorstore_en")
+)
+
 # ─────────────────────────────────────────────
 # Demo 1 — Configuration
 # Edit this file to adapt the app to your own documents.
@@ -70,8 +81,8 @@ CAPABILITY_CARDS = [
     {
         "title": "🇮🇩 Bahasa Indonesia",
         "desc": (
-            "Tanya dalam Bahasa Indonesia. Sistem mendeteksi bahasa "
-            "otomatis dan menjawab dalam bahasa yang sama."
+            "Tanya langsung dalam Bahasa Indonesia — pencarian dan jawaban "
+            "ditangani dalam bahasa yang sama, tanpa terjemahan."
         ),
     },
 ]
@@ -102,3 +113,46 @@ SOURCE_FRIENDLY = {
 LLM_PROVIDER      = "groq"
 LLM_MODEL_FAST    = "openai/gpt-oss-20b"    # query expansion — cheap and quick
 LLM_MODEL_QUALITY = "openai/gpt-oss-120b"   # answering — quality matters
+
+# ─────────────────────────────────────────────
+# Embeddings + chunking
+# ─────────────────────────────────────────────
+# The chunk budget MUST stay under the embedding model's window. If it does
+# not, the tail of every chunk is silently dropped at embedding time and never
+# becomes searchable — that was the original defect: 3,500-character chunks
+# against a 256-token model left 53% of the corpus invisible.
+# Chosen by measurement, not by preference — see the bake-off table in
+# docs/plans/2026-09-18-demo1-overhaul.md. The English-only all-MiniLM-L6-v2
+# scored 50% page hit-rate; this multilingual model scores 78% and fixes the
+# Bahasa path outright. Override with DEMO1_EMBED_MODEL=... to re-run the
+# comparison without editing code.
+EMBED_MODEL = os.getenv(
+    "DEMO1_EMBED_MODEL", "intfloat/multilingual-e5-small"
+)
+
+# Models that expect task prefixes. E5-family models are trained this way and
+# lose accuracy without them; everything else embeds raw text.
+EMBED_PROMPTS = {
+    "intfloat/multilingual-e5-small": {"query": "query: ", "passage": "passage: "},
+    "intfloat/multilingual-e5-base": {"query": "query: ", "passage": "passage: "},
+}
+
+# Fraction of the model's window a chunk may occupy, leaving room for the
+# "[file | §clause | p.N]" label. The window itself is read from the model's own
+# tokenizer at ingest time — never hardcoded.
+CHUNK_WINDOW_FRACTION = 0.85
+
+# Cross-encoder used to rerank candidates. The multilingual mMARCO model trades
+# a little English accuracy for a lot of Bahasa — 83%/67% versus 92%/33% — and
+# lifts overall page MRR from 0.529 to 0.624.
+RERANK_MODEL = os.getenv(
+    "DEMO1_RERANK_MODEL", "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
+)
+
+# How many chunks to hand the answering model. Chunks are now clause-sized
+# (~200 tokens) rather than page-sized, so retrieval depth — not a fixed count —
+# is what keeps the context budget comparable to before.
+FINAL_TOP_K         = 12
+
+# Chroma collection name — changing it forces a clean rebuild.
+COLLECTION_NAME     = "og_docs"
