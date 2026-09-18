@@ -48,21 +48,48 @@ def test_vectorstore_path_is_configurable(monkeypatch):
 
 
 def test_index_presence_is_checked_without_opening_chroma(tmp_path, monkeypatch):
-    """Opening Chroma and then deleting its directory is what made the deployed
-    build fail with SQLITE_READONLY_DBMOVED. Presence must be a file check."""
+    """A store counts as present only when it actually holds vectors.
+
+    A file-size check is not enough: opening Chroma on a directory initialises
+    a full schema, so an empty index looks healthy. And opening a client at all
+    is what caused SQLITE_READONLY_DBMOVED in deployment.
+    """
+    import sqlite3
+
     import ingest
 
-    empty = tmp_path / "empty"
-    empty.mkdir()
-    monkeypatch.setattr(ingest, "VECTORSTORE", empty)
+    store = tmp_path / "store"
+    store.mkdir()
+    monkeypatch.setattr(ingest, "VECTORSTORE", store)
     assert ingest.index_present() is False
 
-    database = empty / "chroma.sqlite3"
-    database.write_bytes(b"")
-    assert ingest.index_present() is False, "an empty database is not an index"
+    database = store / "chroma.sqlite3"
+    database.write_bytes(b"not a database at all")
+    assert ingest.index_present() is False, "an unreadable file is not an index"
 
-    database.write_bytes(b"sqlite-format-bytes")
+    database.unlink()
+    connection = sqlite3.connect(database)
+    connection.execute("CREATE TABLE embeddings (id TEXT)")
+    connection.commit()
+    connection.close()
+    assert ingest.index_present() is False, "an empty table is not an index"
+
+    connection = sqlite3.connect(database)
+    connection.execute("INSERT INTO embeddings VALUES ('a')")
+    connection.commit()
+    connection.close()
     assert ingest.index_present() is True
+
+
+def test_chroma_client_cache_can_be_cleared():
+    """Chroma reuses a client per path; a rebuilt path needs a fresh one."""
+    from chromadb.api.shared_system_client import SharedSystemClient
+
+    import embeddings
+
+    SharedSystemClient._identifier_to_system["probe-identifier"] = object()
+    embeddings.clear_chroma_client_cache()
+    assert "probe-identifier" not in SharedSystemClient._identifier_to_system
 
 
 @pytest.mark.skipif(not os.getenv("GROQ_API_KEY"), reason="requires GROQ_API_KEY")

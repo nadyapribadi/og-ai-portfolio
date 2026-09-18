@@ -33,3 +33,24 @@ def embedding_window(model_name=None):
     window = getattr(tokenizer, "model_max_length", None) or 512
     # Tokenizers use a huge sentinel when the window is unknown.
     return window if 0 < window <= 8192 else 512
+
+
+def clear_chroma_client_cache():
+    """Drop Chroma's per-path client cache.
+
+    Chroma keys a persistent client by its path and hands back the same
+    underlying System for the same path, connection included. Once an index
+    directory has been deleted and rebuilt — which happens whenever the app
+    rebuilds an index it found unusable — that reused connection still points
+    at the deleted database, and the next write fails with
+    SQLITE_READONLY_DBMOVED (1032), reported as "attempt to write a readonly
+    database".
+
+    Clearing the cache forces a fresh client for the rebuilt directory.
+    """
+    try:
+        from chromadb.api.shared_system_client import SharedSystemClient
+
+        SharedSystemClient.clear_system_cache()
+    except Exception:                # noqa: BLE001 - never fail on cleanup
+        pass

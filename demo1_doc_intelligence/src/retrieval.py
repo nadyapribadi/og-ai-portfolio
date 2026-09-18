@@ -28,7 +28,7 @@ from config import (  # noqa: E402
     RERANK_MODEL,
     VECTORSTORE_DIR,
 )
-from embeddings import build_embeddings  # noqa: E402
+from embeddings import build_embeddings, clear_chroma_client_cache  # noqa: E402
 
 # Load demo1's own .env, wherever the process was started from.
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -75,14 +75,21 @@ def load_vectorstore(_lang=None):
     if "vs" in _vs_cache:
         return _vs_cache["vs"]
 
+    # A rebuild may have replaced the directory behind a cached client.
+    clear_chroma_client_cache()
     print(f"  embedding: {EMBED_MODEL}")
     vectorstore = Chroma(
         collection_name=COLLECTION_NAME,
         embedding_function=build_embeddings(),
         persist_directory=str(VECTORSTORE_DIR),
     )
-    print(f"  vectorstore loaded: {vectorstore._collection.count()} chunks")
-    _vs_cache["vs"] = vectorstore
+    count = vectorstore._collection.count()
+    print(f"  vectorstore loaded: {count} chunks")
+    # Do not cache an empty index: it means the store is missing or was replaced
+    # underneath us, and the next caller should open a fresh one rather than
+    # keep a dead handle.
+    if count:
+        _vs_cache["vs"] = vectorstore
     return vectorstore
 
 

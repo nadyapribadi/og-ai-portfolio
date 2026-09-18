@@ -10,6 +10,7 @@ Run:  python demo1_doc_intelligence/src/ingest.py
 import shutil
 import sys
 import re
+import sqlite3
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -29,7 +30,11 @@ from config import (  # noqa: E402
     SAMPLE_DOCS_DIR,
     VECTORSTORE_DIR,
 )
-from embeddings import build_embeddings, embedding_window  # noqa: E402
+from embeddings import (  # noqa: E402
+    build_embeddings,
+    clear_chroma_client_cache,
+    embedding_window,
+)
 
 # Load demo1's own .env, wherever the process was started from.
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -164,6 +169,9 @@ def build_vectorstore(chunks):
     print(f"  model:  {EMBED_MODEL}")
     print(f"  saving: {VECTORSTORE}")
 
+    # Drop any cached client for this path *before* deleting the directory, so
+    # nothing is holding a database we are about to replace.
+    clear_chroma_client_cache()
     if VECTORSTORE.exists():
         print("  clearing existing vectorstore ...")
         shutil.rmtree(VECTORSTORE)
@@ -217,16 +225,34 @@ def build_index():
 
 
 def index_present():
-    """Is there an index on disk already?
+    """Does the store on disk actually hold vectors?
 
-    Deliberately does NOT open Chroma to find out. Opening a client and then
-    deleting its directory from underneath it makes SQLite fail the next write
-    with SQLITE_READONLY_DBMOVED (1032) — "attempt to write a readonly
-    database". That is exactly how the first deployed build died, and it looked
-    like a read-only filesystem rather than what it was.
+    Reads Chroma's SQLite file directly, read-only, rather than opening a Chroma
+    client. Two reasons:
+
+    * Opening a client and then rebuilding the directory it points at leaves
+      that client holding a deleted database, and the next write fails with
+      SQLITE_READONLY_DBMOVED (1032) — reported as "attempt to write a readonly
+      database", which is how this failed in deployment.
+    * A file-size check is not enough: the moment anything opens Chroma on a
+      directory it initialises a full-size schema, so an empty index still
+      looks like a healthy one.
     """
     database = VECTORSTORE / "chroma.sqlite3"
-    return database.exists() and database.stat().st_size > 0
+    if not database.exists():
+        return False
+    try:
+        connection = sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        try:
+            count = connection.execute(
+                "SELECT COUNT(*) FROM embeddings"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        return count > 0
+    except sqlite3.Error:
+        # Missing table, unreadable file, not a Chroma database at all.
+        return False
 
 
 def ensure_vectorstore():
