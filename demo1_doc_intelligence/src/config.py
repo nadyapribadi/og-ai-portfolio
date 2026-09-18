@@ -9,6 +9,15 @@ VECTORSTORE_DIR = Path(
     os.getenv("DEMO1_VECTORSTORE", DEMO_ROOT / "data" / "vectorstore_en")
 )
 
+# Where documents are read from. The real corpus (raw_docs) wins whenever it
+# holds anything; sample_docs is the committed, licence-free fallback that makes
+# a fresh clone runnable. See ingest.select_docs_dirs().
+RAW_DOCS_DIR    = DEMO_ROOT / "data" / "raw_docs"
+SAMPLE_DOCS_DIR = DEMO_ROOT / "sample_docs"
+# Override to point at a mounted volume or a different corpus, e.g. in a
+# container:  DEMO1_DOCS_DIR=/data/specs
+DOCS_DIR_OVERRIDE = os.getenv("DEMO1_DOCS_DIR")
+
 # ─────────────────────────────────────────────
 # Demo 1 — Configuration
 # Edit this file to adapt the app to your own documents.
@@ -51,6 +60,25 @@ SAMPLE_QUESTIONS = {
         "Apa saja aturan keselamatan jiwa menurut IOGP?",
         "Apa yang harus dilakukan sebelum memasuki ruang tertutup?",
         "Apa perbedaan antara kejadian keselamatan proses Tier 1 dan Tier 2?",
+    ],
+}
+
+# Shown instead when the index was built from the bundled sample corpus, so the
+# first thing a new user clicks actually works.
+SAMPLE_QUESTIONS_SAMPLE = {
+    "📐 Technical requirements": [
+        "What is the minimum design pressure for the deluge skid?",
+        "What ingress protection rating is required for electrical enclosures?",
+        "What surface preparation standard applies to steel structures?",
+    ],
+    "✅ Quality requirements": [
+        "What pressure test is required and for how long?",
+        "What documents must the manufacturing record book contain?",
+        "When must conformity assessment be completed?",
+    ],
+    "🇮🇩 Bahasa Indonesia": [
+        "Berapa tekanan desain minimum untuk deluge skid?",
+        "Apa yang harus disiapkan sebelum pengujian tekanan?",
     ],
 }
 
@@ -113,6 +141,13 @@ SOURCE_FRIENDLY = {
 LLM_PROVIDER      = "groq"
 LLM_MODEL_FAST    = "openai/gpt-oss-20b"    # query expansion — cheap and quick
 LLM_MODEL_QUALITY = "openai/gpt-oss-120b"   # answering — quality matters
+
+# Tried in order if the primary model is retired, rate-limited or overloaded.
+# This is what stops a provider deprecation from silently killing the app.
+LLM_FALLBACK_MODELS = [
+    m for m in os.getenv("DEMO1_FALLBACK_MODELS", "openai/gpt-oss-120b,qwen/qwen3.8-27b").split(",")
+    if m.strip()
+]
 
 # ─────────────────────────────────────────────
 # Embeddings + chunking

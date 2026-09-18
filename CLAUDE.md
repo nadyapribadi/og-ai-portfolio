@@ -40,42 +40,51 @@ Must be able to visibly demonstrate multilingual capability.
 ### Architecture
 
 ```
-PDFs → pdfplumber (text + table markdown)
-     → RecursiveCharacterTextSplitter (3500 chars, overlap 150)
-     → filter chunks < 100 chars
-     → HuggingFace embeddings (all-MiniLM-L6-v2) locally
-     → ChromaDB vectorstore_en/
+PDF or markdown → pdfplumber (text + table markdown), or raw text
+                → strip running headers, drop the table of contents
+                → Document → Section → Clause  (parse.py)
+                → one chunk per clause, never crossing a page break
+                → local embeddings (intfloat/multilingual-e5-small, 512-token
+                  window; the chunk budget is derived from that window)
+                → ChromaDB
 
 Query time:
-Question → langdetect → Google Translate if non-English
-         → expand_query() via Groq 8B → 3 search variants
-         → MMR search across variants (fetch_k=30)
-         → cross-encoder reranker (ms-marco-MiniLM-L-6-v2, local, ~80MB)
-         → top 6 chunks → Groq 70B → answer with strict citation rules
+Question → route by document family / role (e.g. S-737 TRS)
+         → BM25 ∥ vector search → reciprocal rank fusion
+         → local cross-encoder rerank (mmarco-mMiniLMv2, cached per process)
+         → top 12 chunks → LLM returns a claims schema
+         → every claim validated against the excerpts it cites
          → Streamlit UI
 ```
 
 ### Key decisions
 
-**No Reverse HyDE at ingest.** Removed — exhausted 100k daily Groq token quota for 275 chunks.
-Cross-encoder reranker solves vocabulary mismatch without any API calls.
+**Everything retrieves locally and free.** Embeddings, BM25 and the reranker all
+run on CPU. The only paid-ish call is the final answer, and on the Groq free
+tier that is enough for a demo.
 
-**pdfplumber over PyPDF.** Preserves table column structure. Critical for 456.pdf consequence tables.
+**Chunk size is derived, not chosen.** The chunk budget is computed from the
+embedding model's own token window at ingest time. The original bug was 3,500-
+character chunks against a 256-token model, which left 53% of the corpus
+invisible to search.
 
-**Dual model:**
-- `llama-3.1-8b-instant` — query expansion (~150 tokens, fast)
-- `llama-3.3-70b-versatile` — answering (~2000-3000 tokens, quality)
+**Multilingual by embedding, not by translation.** The corpus is embedded once
+with a multilingual model, so a Bahasa question searches natively. This deleted
+`langdetect`, `deep-translator`, a second vector store and the language-override
+control — and fixed a Bahasa page hit-rate that was 0% before.
 
-**Groq free tier:** 100k tokens/day on 70B. ~35-50 answers/day. Fine for demos.
+**Citations are verified, not requested.** The model returns a claims schema and
+`answer.validate_claims()` rejects any claim citing an excerpt that was not
+retrieved, or quoting text that is not in it. The prompt no longer has to be
+trusted for correctness of citations.
 
-**7-rule system prompt:**
-1. Use only provided excerpts — no gap-filling from general knowledge
-2. Cite every claim: (Source: filename, Page: N)
-3. Prohibitions are complete answers
-4. Never hedge falsely if answer is in excerpts
-5. Keep technical terms in English even in Bahasa answers
-6. Show incomplete lists honestly
-7. Say "not found" only if genuinely absent
+**Providers are config, not code.** `llm.py` builds chat models from
+`LLM_PROVIDER`, validates model ids at startup (Groq retires models, which is
+how this app died) and falls back to the next model on a rate limit or a
+retirement.
+
+**Query expansion was removed.** It scored identically with and without it —
+one LLM call per question for no measurable gain.
 
 ### Document pack
 
@@ -91,20 +100,26 @@ Cross-encoder reranker solves vocabulary mismatch without any API calls.
 | S-719Qv2025-01 QRS.pdf | JIP33 S-719 Water Mist — Quality |
 | S-719Jv2025-01 TRS with Justification.pdf | JIP33 S-719 — Justification |
 
-### Verified working questions
+### Measured results
 
-English: life saving rules, confined space, hot work, Tier 1/2 KPIs,
-LOPC consequences, S-737 electrical standards, deluge skid design,
-suspended load prohibition, process safety KPI measurement.
+`python demo1_doc_intelligence/eval/run_eval.py --no-expand` — 18 questions
+(12 English, 6 Bahasa), retrieval only:
 
-Bahasa Indonesia: aturan keselamatan jiwa, ruang tertutup,
-Tier 1 vs Tier 2, persyaratan desain deluge skid.
+| Stage | Right document | Right page @12 |
+|---|---|---|
+| Original (English model, 3,500-char chunks) | 94% | 56% |
+| Clause chunks, still English model | 94% | 50% |
+| + multilingual embeddings + mMARCO rerank | 100% | 78% |
+| + hybrid BM25/RRF + document routing | **100%** | **89%** |
+
+English 92%, Bahasa Indonesia 83% (was 0%). The full progression and the
+reasoning behind each step are in
+`demo1_doc_intelligence/docs/plans/2026-09-18-demo1-overhaul.md`.
 
 ### Pending
 
-- Test all questions through UI after daily token reset
-- Deploy to Streamlit Cloud
-- Add live demo link to README
+- Deploy to Streamlit Cloud (index builds on first run, so no index is committed)
+- Add the live demo link to the README
 
 ---
 

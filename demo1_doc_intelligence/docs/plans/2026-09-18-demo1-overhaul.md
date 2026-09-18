@@ -168,19 +168,51 @@ Note: zero fabrications *caught* means the model behaved on these four — it do
 not by itself prove the guardrail works. The unit tests in `tests/test_answer.py`
 are what cover that, with a fabricated page number and a fabricated quote.
 
-## Phase 3 — Make it durable (~1 day)
+## Phase 3 — Make it durable
 
 Exit criteria: CI green on a fresh clone; no model ID outside config; live demo link.
 
-- [ ] 3.1 Provider-agnostic LLM layer with fallback chain
-- [ ] 3.2 Split stages; `app.py` becomes UI only
-- [ ] 3.3 Dependency hygiene (declared direct deps + lock)
-- [ ] 3.4 GitHub Actions: smoke test + retrieval-only eval on every push
-- [ ] 3.5 Remove dead code and the stale `data/vectorstore/`
-- [ ] 3.6 Reconcile the two project copies; repo becomes canonical
-- [ ] 3.7 Add one freely-licensed sample document (real PDFs stay out — copyright)
-- [ ] 3.8 Update README / CLAUDE.md with real eval numbers
-- [ ] 3.9 Push, deploy to Streamlit Cloud, add the live link
+- [x] 3.1 Provider-agnostic LLM layer with fallback chain (`llm.py`)
+- [x] 3.2 Split stages — parse / hybrid / routing / llm / answer / retrieval
+- [x] 3.3 Dependency hygiene: direct deps in `requirements.txt`, graph in `requirements.lock.txt`
+- [x] 3.4 GitHub Actions: unit tests + sample-corpus smoke on every push
+- [x] 3.5 Remove dead code and the stale `data/vectorstore_multi/`
+- [ ] 3.6 Reconcile the two project copies — **needs you** (outside this workspace)
+- [x] 3.7 Bundled sample corpus + markdown support + index-on-first-run
+- [x] 3.8 README / CLAUDE.md / demo1_README updated with measured numbers
+- [ ] 3.9 Push and deploy — **needs you** (credentials)
+
+### Phase 3 notes
+
+**Dependencies.** `requirements.txt` had become a `pip freeze` capture — ~150
+transitive pins that still omitted five packages the code imported. It is now
+the direct list (13 packages) with the resolved graph in
+`requirements.lock.txt` (135 packages). `langchain` and
+`langchain-community` are gone from the graph entirely: nothing imports them
+any more, and they were pulling in `kubernetes` and `GitPython`.
+
+**The sample corpus solves two problems at once.** The real IOGP/JIP33 PDFs
+cannot be redistributed, so committing them would be a copyright problem, and
+not committing them leaves a fresh clone with nothing to search. A synthetic
+spec pair (TRS + QRS, authored for this repo) is committed instead. It is
+licence-free, diffable in git, and exercises the clause parser, the
+TRS/QRS routing and the citation path. Real documents still take precedence
+whenever `data/raw_docs/` has anything in it.
+
+**Index on first run.** `ingest.ensure_vectorstore()` builds an index from
+whatever documents are present, so no index has to be committed and the app can
+deploy anywhere. This is what makes the hosting choice a config decision rather
+than a rewrite.
+
+### Remaining, needs you
+
+1. **Push the branch** and open a PR, or merge `demo1-hardening` into `main`.
+2. **Deploy** to Streamlit Community Cloud — point it at
+   `demo1_doc_intelligence/src/app.py`. Because `requirements.txt` now lives
+   inside the demo folder, either add a one-line root `requirements.txt`
+   (`-r demo1_doc_intelligence/requirements.txt`) or set the install path in the
+   deploy settings. Streamlit Cloud looks for it at the repo root.
+3. **Retire `~/og-ai-portfolio`** once you are happy: the repo is canonical now.
 
 ## Phase 4 (optional, only after 0–3)
 

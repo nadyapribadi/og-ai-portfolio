@@ -12,7 +12,7 @@ Built by **Nadya Boyke Pribadi**.
 
 | | Demo | Problem Solved | Status |
 |---|---|---|---|
-| 1 | [O&G Document Intelligence](#demo-1--og-document-intelligence) | Search IOGP standards and JIP33 specs in plain English | 🔨 Building |
+| 1 | [O&G Document Intelligence](#demo-1--og-document-intelligence) | Search IOGP standards and JIP33 specs in plain English or Bahasa Indonesia | ✅ Working |
 | 2 | [Incident Intelligence Copilot](#demo-2--incident-intelligence-copilot) | Query offshore and industrial incident patterns | 📋 In development |
 | 3 | [Drilling Operations Copilot](#demo-3--drilling-operations-copilot) | Auto-draft Daily Drilling Reports from structured inputs | 📋 Planned |
 
@@ -77,6 +77,11 @@ mkdir -p demo1_doc_intelligence/data/raw_docs
 python demo1_doc_intelligence/src/ingest.py   # ~30 seconds
 streamlit run demo1_doc_intelligence/src/app.py
 ```
+
+You can skip adding PDFs: if `data/raw_docs/` is empty the app indexes the small
+**sample corpus** in `demo1_doc_intelligence/sample_docs/` instead, so a fresh
+clone works immediately. The app builds its index on first run if one is
+missing, which is what makes it deployable anywhere without committing an index.
 
 Run the tests:
 

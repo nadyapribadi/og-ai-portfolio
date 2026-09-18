@@ -9,6 +9,7 @@ Run:  python demo1_doc_intelligence/src/ingest.py
 """
 import shutil
 import sys
+import re
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -22,7 +23,10 @@ import parse  # noqa: E402
 from config import (  # noqa: E402
     CHUNK_WINDOW_FRACTION,
     COLLECTION_NAME,
+    DOCS_DIR_OVERRIDE,
     EMBED_MODEL,
+    RAW_DOCS_DIR,
+    SAMPLE_DOCS_DIR,
     VECTORSTORE_DIR,
 )
 from embeddings import build_embeddings, embedding_window  # noqa: E402
@@ -31,56 +35,99 @@ from embeddings import build_embeddings, embedding_window  # noqa: E402
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 DEMO_ROOT    = Path(__file__).parent.parent
-DOCS_DIR     = DEMO_ROOT / "data" / "raw_docs"
 VECTORSTORE  = VECTORSTORE_DIR
 MIN_PAGE_LEN = 20      # skip cover pages that carry no extractable text
 
+# Text formats are supported so the committed sample corpus needs no PDF —
+# which keeps it licence-free, diffable in git and reviewable in a pull request.
+TEXT_SUFFIXES = {".md", ".txt"}
+PAGE_MARKER = re.compile(r"^\s*<!--\s*page\s*-->\s*$", re.I | re.M)
 
-def load_pages():
-    """Extract per-page text, converting tables to markdown to keep columns."""
+
+def select_docs_dirs():
+    """Real documents if any exist, otherwise the bundled sample corpus."""
+    if DOCS_DIR_OVERRIDE:
+        override = Path(DOCS_DIR_OVERRIDE)
+        if not override.exists():
+            raise FileNotFoundError(f"DEMO1_DOCS_DIR does not exist: {override}")
+        return [override], f"{override} (DEMO1_DOCS_DIR)"
+    if RAW_DOCS_DIR.exists():
+        real = [
+            p
+            for p in sorted(RAW_DOCS_DIR.iterdir())
+            if p.suffix.lower() in {".pdf", *TEXT_SUFFIXES}
+        ]
+        if real:
+            return [RAW_DOCS_DIR], "your documents"
+    return [SAMPLE_DOCS_DIR], "bundled sample corpus"
+
+
+def _pages_from_pdf(path):
     import pdfplumber
 
-    pdf_files = sorted(DOCS_DIR.glob("*.pdf"))
-    if not pdf_files:
+    with pdfplumber.open(str(path)) as pdf:
+        # start=1 so citations match the page numbers a human sees in the PDF.
+        for page_num, page in enumerate(pdf.pages, start=1):
+            text = page.extract_text() or ""
+
+            tables = page.extract_tables()
+            if tables:
+                rendered = []
+                for table in tables:
+                    if not table:
+                        continue
+                    rows = [
+                        "| "
+                        + " | ".join(
+                            (cell or "").replace("\n", " ") for cell in row
+                        )
+                        + " |"
+                        for row in table
+                    ]
+                    if rows:
+                        rendered.append(
+                            rows[0]
+                            + "\n| "
+                            + " | ".join(["---"] * len(table[0]))
+                            + " |\n"
+                            + "\n".join(rows[1:])
+                        )
+                if rendered:
+                    text += "\n\n" + "\n\n".join(rendered)
+
+            yield page_num, text
+
+
+def _pages_from_text(path):
+    raw = path.read_text(encoding="utf-8")
+    for number, chunk in enumerate(PAGE_MARKER.split(raw), start=1):
+        yield number, chunk
+
+
+def load_pages():
+    """Extract per-page text from whatever documents are available."""
+    dirs, source = select_docs_dirs()
+    files = [
+        path
+        for directory in dirs
+        if directory.exists()
+        for path in sorted(directory.iterdir())
+        if path.suffix.lower() in {".pdf", *TEXT_SUFFIXES}
+    ]
+    if not files:
         raise FileNotFoundError(
-            f"No PDFs found in {DOCS_DIR}\n"
-            "Add your documents there, then re-run ingest."
+            f"No documents found in {dirs}\n"
+            f"Put your PDFs in {RAW_DOCS_DIR}, or keep the bundled sample."
         )
+    print(f"  source: {source} ({len(files)} files)")
 
     pages = []
-    for pdf_path in pdf_files:
-        print(f"  reading {pdf_path.name}")
-        with pdfplumber.open(str(pdf_path)) as pdf:
-            for page_num, page in enumerate(pdf.pages, start=1):
-                text = page.extract_text() or ""
-
-                tables = page.extract_tables()
-                if tables:
-                    rendered = []
-                    for table in tables:
-                        if not table:
-                            continue
-                        rows = [
-                            "| "
-                            + " | ".join(
-                                (cell or "").replace("\n", " ") for cell in row
-                            )
-                            + " |"
-                            for row in table
-                        ]
-                        if rows:
-                            rendered.append(
-                                rows[0]
-                                + "\n| "
-                                + " | ".join(["---"] * len(table[0]))
-                                + " |\n"
-                                + "\n".join(rows[1:])
-                            )
-                    if rendered:
-                        text += "\n\n" + "\n\n".join(rendered)
-
-                if len(text.strip()) >= MIN_PAGE_LEN:
-                    pages.append(parse.Page(pdf_path.name, page_num, text))
+    for path in files:
+        print(f"  reading {path.name}")
+        extract = _pages_from_pdf if path.suffix.lower() == ".pdf" else _pages_from_text
+        for page_num, text in extract(path):
+            if len(text.strip()) >= MIN_PAGE_LEN:
+                pages.append(parse.Page(path.name, page_num, text))
     return pages
 
 
@@ -128,7 +175,8 @@ def build_vectorstore(chunks):
     print(f"  done — {vectorstore._collection.count()} chunks indexed")
 
 
-if __name__ == "__main__":
+def build_index():
+    """Run the whole pipeline. Returns the number of chunks indexed."""
     print("=== Step 1: extract pages ===")
     pages = load_pages()
     print(f"  {len(pages)} pages from {len({p.source_file for p in pages})} PDFs")
@@ -158,3 +206,32 @@ if __name__ == "__main__":
     print("\n=== Step 4: embeddings ===")
     build_vectorstore(chunks)
     print("\n✅ vectorstore ready")
+    return len(chunks)
+
+
+def ensure_vectorstore():
+    """Build the index when it is missing or empty.
+
+    This is what makes the app portable: a fresh clone, a CI runner or a
+    Streamlit Cloud deploy can start with no committed index and build one from
+    whatever documents are present. Returns True when it built something.
+    """
+    if VECTORSTORE.exists():
+        try:
+            from langchain_chroma import Chroma
+
+            existing = Chroma(
+                collection_name=COLLECTION_NAME,
+                embedding_function=build_embeddings(),
+                persist_directory=str(VECTORSTORE),
+            )
+            if existing._collection.count() > 0:
+                return False
+        except Exception:                           # noqa: BLE001
+            pass                                    # unreadable → rebuild
+    build_index()
+    return True
+
+
+if __name__ == "__main__":
+    build_index()

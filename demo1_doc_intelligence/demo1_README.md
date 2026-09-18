@@ -7,11 +7,28 @@ English and Bahasa Indonesia supported.
 
 ## Status
 
-| File | Status |
-|------|--------|
-| `ingest.py` | ✅ Working — 30 seconds, no API calls |
-| `retrieval.py` | ✅ Working — cross-encoder reranker |
-| `app.py` | ✅ Working — Streamlit UI with streaming |
+Measured on an 18-question golden set (12 English, 6 Bahasa Indonesia),
+retrieval only, `eval/run_eval.py`:
+
+| Metric | Result |
+|---|---|
+| Right document retrieved | 100% |
+| Right page retrieved (@6 / @12) | 78% / 89% |
+| English pages | 92% |
+| Bahasa Indonesia pages | 83% |
+| Citation validity, verified answers | 100% (14 claims) |
+
+| File | What it does |
+|------|--------------|
+| `parse.py` | PDF/markdown → Document → Section → Clause |
+| `ingest.py` | Clauses → page-bounded chunks → Chroma |
+| `retrieval.py` | route → BM25 + vector → RRF → rerank |
+| `answer.py` | schema-constrained answers with verified citations |
+| `llm.py` | provider-agnostic chat models with a fallback chain |
+| `app.py` | Streamlit UI |
+
+The document set is configurable: point `DEMO1_DOCS_DIR` at another folder, or
+drop PDFs into `data/raw_docs/` (which then take precedence over the sample).
 
 ---
 

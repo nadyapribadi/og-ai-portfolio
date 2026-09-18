@@ -183,7 +183,9 @@ def parent_of(clause_id):
 
 def describe_document(filename):
     """Map a filename to (family, role) — e.g. S-737 TRS, IOGP 459 report."""
-    match = re.match(r"^(S-\d+)[A-Za-z]?v[\d-]+\s*(.*)\.pdf$", filename, re.I)
+    match = re.match(
+        r"^(S-\d+)[A-Za-z]?v[\d-]+\s*(.*)\.[A-Za-z0-9]+$", filename, re.I
+    )
     if match:
         family, tail = match.group(1).upper(), match.group(2).strip()
         role = "TRS" if "TRS" in tail.upper() else (
@@ -194,7 +196,7 @@ def describe_document(filename):
         if "justification" in tail.lower():
             role += "+Justification"
         return family, role
-    if match := re.match(r"^(\d{3})\.pdf$", filename):
+    if match := re.match(r"^(\d{3})\.[A-Za-z0-9]+$", filename):
         return f"IOGP {match.group(1)}", "Report"
     return filename.rsplit(".", 1)[0], "document"
 

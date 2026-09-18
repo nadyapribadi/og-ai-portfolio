@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from retrieval import ask, load_vectorstore, validate_models
 from config import (
     APP_TITLE, APP_SUBTITLE,
-    DOCUMENT_SOURCES, SAMPLE_QUESTIONS,
+    DOCUMENT_SOURCES, SAMPLE_QUESTIONS, SAMPLE_QUESTIONS_SAMPLE,
     CAPABILITY_CARDS, SOURCE_FRIENDLY, LLM_MODEL_QUALITY,
 )
 
@@ -361,7 +361,17 @@ if "confirm_clear" not in st.session_state:
 # ─────────────────────────────────────────────
 @st.cache_resource(show_spinner="Loading document index...")
 def get_vectorstore():
+    # A fresh clone has no index. Build one from whatever documents exist
+    # instead of failing — that is what makes the demo portable across hosts.
+    import ingest
+    ingest.ensure_vectorstore()
     return load_vectorstore("en")
+
+
+@st.cache_resource(show_spinner=False)
+def get_corpus_families():
+    from retrieval import corpus_families
+    return corpus_families()
 
 
 @st.cache_resource(show_spinner=False)
@@ -431,7 +441,12 @@ with st.sidebar:
 
     # Sample questions — with visual category separation
     st.markdown('<div class="sidebar-label">💡 Try asking</div>', unsafe_allow_html=True)
-    for category, questions in SAMPLE_QUESTIONS.items():
+    question_set = (
+        SAMPLE_QUESTIONS
+        if "IOGP 459" in get_corpus_families()
+        else SAMPLE_QUESTIONS_SAMPLE
+    )
+    for category, questions in question_set.items():
         st.markdown(f'<div class="cat-header">{category}</div>', unsafe_allow_html=True)
         for q in questions:
             if st.button(q, key=f"btn_{hash(q)}", use_container_width=True):

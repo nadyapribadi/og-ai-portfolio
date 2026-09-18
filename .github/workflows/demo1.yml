@@ -1,0 +1,64 @@
+name: demo1
+
+on:
+  push:
+    paths:
+      - "demo1_doc_intelligence/**"
+      - ".github/workflows/demo1.yml"
+  pull_request:
+    paths:
+      - "demo1_doc_intelligence/**"
+      - ".github/workflows/demo1.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: demo1_doc_intelligence/requirements.lock.txt
+
+      - name: Install dependencies
+        run: pip install -r demo1_doc_intelligence/requirements-dev.txt
+
+      - name: Unit tests
+        run: python -m pytest demo1_doc_intelligence/tests -q
+
+      # The real IOGP/JIP33 corpus is copyrighted and is never committed, so CI
+      # exercises the whole pipeline against the bundled sample corpus instead.
+      # This is what proves a fresh clone is actually runnable.
+      - name: Build the index from the bundled sample corpus
+        env:
+          DEMO1_DOCS_DIR: demo1_doc_intelligence/sample_docs
+          DEMO1_VECTORSTORE: /tmp/vs
+        run: python demo1_doc_intelligence/src/ingest.py
+
+      - name: Retrieval smoke test
+        env:
+          DEMO1_VECTORSTORE: /tmp/vs
+        run: |
+          cd demo1_doc_intelligence/src
+          python - <<'PY'
+          import retrieval
+
+          families = retrieval.corpus_families()
+          assert families == {"S-900"}, families
+
+          store = retrieval.load_vectorstore()
+          cases = {
+              "What is the minimum design pressure for the deluge skid?": "4.2.1",
+              "What ingress protection rating is required?": "4.1.1",
+              "Berapa tekanan desain minimum?": "4.2.1",
+          }
+          for question, expected_clause in cases.items():
+              hits = retrieval.search_chunks(store, question)
+              got = {c.metadata.get("clause_id") for c in hits}
+              assert expected_clause in got, f"{question!r} -> {sorted(got)}"
+              print(f"ok  {question[:52]:54s} §{expected_clause}")
+          PY

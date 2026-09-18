@@ -12,12 +12,11 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_groq import ChatGroq
 
 sys.path.insert(0, str(Path(__file__).parent))
 import answer as answer_mod  # noqa: E402
 import hybrid  # noqa: E402
+import llm  # noqa: E402
 import routing  # noqa: E402
 from config import (  # noqa: E402
     CANDIDATE_K,
@@ -37,52 +36,6 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 GROQ_MODEL_FAST    = LLM_MODEL_FAST
 GROQ_MODEL_QUALITY = LLM_MODEL_QUALITY
-
-MULTILINGUAL_QUERY = True   # queries are embedded natively, never translated
-
-SYSTEM_PROMPT = """You are an expert assistant for upstream oil and gas operations,
-procurement, HSE standards, and supply chain management.
-
-You will be given numbered document excerpts and a question.
-
-STRICT RULES — follow all of them without exception:
-
-RULE 1 — USE ONLY THE EXCERPTS:
-Every single statement in your answer must be directly traceable to a specific excerpt.
-If you cannot point to an excerpt that supports a claim, do NOT make that claim.
-Never use your general knowledge to fill gaps. If information is missing from excerpts, say so.
-
-RULE 2 — CITE EVERY CLAIM:
-After each statement or list item, add the source in parentheses: (Source: filename, Page: N)
-If a claim comes from multiple excerpts, cite all of them.
-Never make an uncited claim.
-
-RULE 3 — HANDLE PROHIBITIONS CORRECTLY:
-If the document prohibits an action entirely (e.g. "never walk under a suspended load"),
-state the prohibition clearly and completely. Do not search for prerequisites that don't exist.
-A prohibition IS the complete answer.
-
-RULE 4 — NEVER HEDGE FALSELY:
-If the information IS in the excerpts, state it confidently and directly.
-Only say information is not found if you genuinely cannot locate it in any excerpt.
-
-RULE 5 — LANGUAGE:
-Answer in the same language the user used to ask the question.
-For technical terms (e.g. Tier 1, LOPC, deluge skid) keep the original English term
-even when answering in Bahasa Indonesia — do not translate technical terms.
-
-RULE 6 — INCOMPLETE LISTS:
-If a list appears incomplete because not all items are in the excerpts,
-show only what IS in the excerpts and end with:
-"Note: this list may be incomplete — only retrieved excerpts are shown."
-Never complete or extend a list beyond what the excerpts contain.
-
-RULE 7 — NOTHING FOUND:
-If genuinely no excerpt contains relevant information, say exactly:
-"This information is not found in the loaded documents."
-
-Document excerpts:
-{context}"""
 
 _vs_cache = {}
 _reranker = None
@@ -112,34 +65,9 @@ def _content_to_text(content):
 
 
 def validate_models(models=None, strict=False):
-    """Check the configured models still exist on this account.
-
-    Groq retires models; without this the app dies mid-question with a bare 404
-    that tells the user nothing. Returns (missing, available).
-    """
+    """Check the configured models still exist — delegates to the provider layer."""
     wanted = list(dict.fromkeys(models or [GROQ_MODEL_FAST, GROQ_MODEL_QUALITY]))
-    try:
-        from groq import Groq
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-        available = sorted(m.id for m in client.models.list().data)
-    except Exception as exc:                      # network, auth, quota ...
-        if strict:
-            raise RuntimeError(f"Could not verify Groq models: {exc}") from exc
-        return [], []
-
-    missing = [m for m in wanted if m not in available]
-    if missing:
-        message = (
-            "These configured models are no longer available on this account: "
-            + ", ".join(missing)
-            + "\nAvailable models: "
-            + ", ".join(available)
-            + "\nUpdate LLM_MODEL_FAST / LLM_MODEL_QUALITY in config.py."
-        )
-        if strict:
-            raise RuntimeError(message)
-        print("WARNING: " + message)
-    return missing, available
+    return llm.validate_models(wanted, strict=strict)
 
 
 def load_vectorstore(_lang=None):
@@ -156,6 +84,13 @@ def load_vectorstore(_lang=None):
     print(f"  vectorstore loaded: {vectorstore._collection.count()} chunks")
     _vs_cache["vs"] = vectorstore
     return vectorstore
+
+
+def corpus_families():
+    """Document families present in the index — used to pick sample questions."""
+    vectorstore = load_vectorstore()
+    metas = vectorstore.get(include=["metadatas"]).get("metadatas") or []
+    return {meta.get("doc_family") for meta in metas if meta.get("doc_family")}
 
 
 def get_reranker():
@@ -295,16 +230,15 @@ def _render(claims):
 
 def _generate(question, chunks):
     """Ask for claims, then keep only the ones that verify against the excerpts."""
-    llm = ChatGroq(
-        model=GROQ_MODEL_QUALITY,
-        temperature=0,
-        api_key=os.getenv("GROQ_API_KEY"),
-    )
-    structured = answer_mod.structured_llm(llm)
-    if structured is None:
-        raise RuntimeError("the configured model cannot return structured output")
+    messages = answer_mod.build_messages(question, build_context(chunks))
 
-    draft = structured.invoke(answer_mod.build_messages(question, build_context(chunks)))
+    def call(model):
+        structured = answer_mod.structured_llm(model)
+        if structured is None:
+            raise RuntimeError("the configured model cannot return structured output")
+        return structured.invoke(messages)
+
+    draft = llm.with_fallback(GROQ_MODEL_QUALITY, call)
     accepted, rejected = answer_mod.validate_claims(draft, chunks)
     return {
         "answer": _render(accepted),
