@@ -58,7 +58,7 @@ multilingual embedding model.
 
 Exit criteria: measured increase in page hit-rate over the Phase 1.1 baseline.
 
-- [ ] 1.1 Golden set + eval harness; record baseline **before** changing anything
+- [x] 1.1 Golden set + eval harness; record baseline **before** changing anything
 - [ ] 1.2 Document model: Document → Section → Clause
 - [ ] 1.3 Clause-level chunking with parent context prepended
 - [ ] 1.4 Metadata: `doc_family`, `doc_role`, `section`, `clause_id`, `page`
@@ -68,6 +68,31 @@ Exit criteria: measured increase in page hit-rate over the Phase 1.1 baseline.
 - [ ] 1.8 Re-run eval; gate at >85–90% page hit-rate
 - [ ] 1.9 Remove `deep_translator`, `langdetect`, dual store, `lang_override`,
       and query expansion if the numbers prove it is unnecessary
+
+### Phase 1.1 — baseline (measured 2026-09-18, before any change)
+
+18 questions (12 English, 6 Bahasa); retrieval only, top-6 chunks.
+
+| Variant | doc hit@6 | page hit@6 | EN page | ID page |
+|---|---|---|---|---|
+| Current pipeline (query expansion on) | 94% | **56%** | 83% | **0%** |
+| Same pipeline, expansion off | 94% | **56%** | 75% | 17% |
+
+**Target to beat: 56% page hit-rate (EN 83%, ID 0%).**
+
+Two findings that change the plan:
+
+1. **Query expansion buys nothing.** 56% either way, at the cost of an LLM call
+   per question. It slightly helps English (83% vs 75%) and slightly hurts
+   Bahasa (0% vs 17%) — both within noise at n=18. Decision for 1.9: remove it.
+2. **The Bahasa claim is false in practice — 0% page hit-rate.** The
+   translate-then-search path fails: `id-02` retrieved S-737 and S-719 pages for
+   a confined-space question about IOGP 459. This is the strongest argument for
+   1.5 (multilingual embeddings replacing the translation hop).
+
+Document-level retrieval is already good (94%) — the problem is *ranking*, not
+finding the right document. That is exactly what clause-level chunking (1.3),
+hybrid search (1.6) and routing (1.7) are meant to fix.
 
 ## Phase 2 — Make answers verifiable (~1 day)
 

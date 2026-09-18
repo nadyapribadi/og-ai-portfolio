@@ -1,0 +1,122 @@
+# Golden set for demo1 retrieval evaluation.
+#
+# Expected pages were taken from the document text itself (page-level
+# extraction), not from memory. Pages are 1-based and match the printed page
+# numbers — confirmed against the document's own table of contents.
+#
+# Where an answer legitimately spans several pages, every acceptable page is
+# listed. `expected_file` is mandatory; `expected_pages` may be empty when only
+# the document matters.
+questions:
+  # ── 459 — IOGP Life-Saving Rules ──
+  - id: en-01
+    lang: en
+    question: "What are the nine life saving rules?"
+    expected_file: "459.pdf"
+    expected_pages: [8]
+
+  - id: en-02
+    lang: en
+    question: "What must I do before entering a confined space?"
+    expected_file: "459.pdf"
+    expected_pages: [8, 13]
+
+  - id: en-03
+    lang: en
+    question: "What are the hot work requirements?"
+    expected_file: "459.pdf"
+    expected_pages: [15]
+
+  - id: en-04
+    lang: en
+    question: "What is required before walking under a suspended load?"
+    expected_file: "459.pdf"
+    expected_pages: [17]
+
+  # ── 456 — Process safety KPIs ──
+  - id: en-05
+    lang: en
+    question: "What does LOPC stand for and what are its consequences?"
+    expected_file: "456.pdf"
+    expected_pages: [9, 16]
+
+  - id: en-06
+    lang: en
+    question: "What is the difference between a Tier 1 and a Tier 2 process safety event?"
+    expected_file: "456.pdf"
+    expected_pages: [16, 18, 48]
+
+  - id: en-07
+    lang: en
+    question: "How are process safety KPIs defined and measured?"
+    expected_file: "456.pdf"
+    expected_pages: [11, 16]
+
+  # ── JIP33 S-737 — Deluge skids ──
+  - id: en-08
+    lang: en
+    question: "What standards does S-737 reference for electrical installations?"
+    expected_file: "S-737v2026-03 TRS.pdf"
+    expected_pages: [9, 10]
+
+  - id: en-09
+    lang: en
+    question: "What is the scope of the S-737 deluge skid specification?"
+    expected_file: "S-737v2026-03 TRS.pdf"
+    expected_pages: [9]
+
+  - id: en-10
+    lang: en
+    question: "What are the protective coating requirements for deluge skids?"
+    expected_file: "S-737v2026-03 TRS.pdf"
+    expected_pages: [29]
+
+  # ── JIP33 S-717 — Noise emitting equipment ──
+  - id: en-11
+    lang: en
+    question: "What does IOGP S-717 cover?"
+    expected_file: "S-717v2025-03 TRS.pdf"
+    expected_pages: [8]
+
+  - id: en-12
+    lang: en
+    question: "What noise emission limits apply to equipment?"
+    expected_file: "S-717v2025-03 TRS.pdf"
+    expected_pages: [9]
+
+  # ── Bahasa Indonesia (answers live in the same English source pages) ──
+  - id: id-01
+    lang: id
+    question: "Apa saja aturan keselamatan jiwa menurut IOGP?"
+    expected_file: "459.pdf"
+    expected_pages: [8]
+
+  - id: id-02
+    lang: id
+    question: "Apa yang harus dilakukan sebelum memasuki ruang tertutup?"
+    expected_file: "459.pdf"
+    expected_pages: [8, 13]
+
+  - id: id-03
+    lang: id
+    question: "Apa perbedaan antara kejadian keselamatan proses Tier 1 dan Tier 2?"
+    expected_file: "456.pdf"
+    expected_pages: [16, 18, 48]
+
+  - id: id-04
+    lang: id
+    question: "Apa itu LOPC dan apa konsekuensinya?"
+    expected_file: "456.pdf"
+    expected_pages: [9, 16]
+
+  - id: id-05
+    lang: id
+    question: "Apa persyaratan desain deluge skid menurut IOGP S-737?"
+    expected_file: "S-737v2026-03 TRS.pdf"
+    expected_pages: [9]
+
+  - id: id-06
+    lang: id
+    question: "Apa cakupan spesifikasi water mist fire protection?"
+    expected_file: "S-719v2025-01 TRS.pdf"
+    expected_pages: [5, 6]
