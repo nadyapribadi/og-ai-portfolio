@@ -129,7 +129,11 @@ Question → route by document family / role
 - Multilingual by embedding, not by translation — a Bahasa question searches the
   English corpus natively, with no language detection to get wrong
 - Citations are verified, not requested: a claim that quotes text not in the
-  retrieved excerpt is discarded before the user sees it
+  retrieved excerpt is discarded before the user sees it. A clause id only has
+  to appear in the excerpt, so a chunk labelled §3.1.1 can be cited as §3.2.1
+  when that is the clause the quoted sentence belongs to
+- Documents never share a clause: a document boundary closes the running clause,
+  so no chunk carries the next document's text under the previous document's name
 - Models run on ONNX Runtime, not torch — see `onnx_models.py` for why
 
 ---

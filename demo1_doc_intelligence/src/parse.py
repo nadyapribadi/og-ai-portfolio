@@ -225,6 +225,16 @@ def split_into_clauses(pages):
 
     for page in pages:
         if page.source_file != current_doc:
+            # A new document starts here, so close the previous document's last
+            # clause and start clean. Without this, everything in the new
+            # document up to its first detected heading — title, foreword,
+            # scope — was appended to the old document's final clause, which
+            # then carried the wrong source_file and page. Those chunks cited
+            # the wrong document, which is the one thing a citing tool cannot
+            # do: the sample corpus attributed the TRS's front matter to the
+            # QRS for exactly this reason.
+            close()
+            current = None
             # Clause numbering is per document — never let one document's ids
             # validate another's bare sub-clause numbers.
             seen_ids = set()

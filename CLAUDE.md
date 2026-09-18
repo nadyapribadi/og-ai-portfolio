@@ -90,6 +90,19 @@ control — and fixed a Bahasa page hit-rate that was 0% before.
 retrieved, or quoting text that is not in it. The prompt no longer has to be
 trusted for correctness of citations.
 
+A clause id only has to *appear in* the excerpt, not be the excerpt's own id.
+Chunks are clause-sized, not clause-exclusive: a chunk labelled §3.1.1 can carry
+§3.2.1, and the model naturally cites the clause its quoted sentence belongs to.
+Demanding the chunk's own id rejected correct answers — the deployed sample
+corpus answered "what pressure test is required and for how long?" with "not
+found" while holding the sentence. Excerpt headers now also list the clause ids
+the excerpt contains, so the model can cite the precise one.
+
+**Documents never share a clause.** Clause numbering is per document, so a
+document boundary closes the running clause. Without that, the next document's
+title, foreword and scope were appended to the previous document's last clause,
+and those chunks cited the wrong file.
+
 **Providers are config, not code.** `llm.py` builds chat models from
 `LLM_PROVIDER`, validates model ids at startup (Groq retires models, which is
 how this app died) and falls back to the next model on a rate limit or a

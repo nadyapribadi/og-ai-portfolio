@@ -28,6 +28,36 @@ def test_running_header_is_stripped():
     assert all(f"body {i}" in cleaned[i - 1].text for i in range(1, 6))
 
 
+def test_a_clause_never_holds_another_documents_lines():
+    """Documents are split separately; their text must not run together.
+
+    The last clause of a document used to keep collecting lines from the next
+    document until it hit a heading — title page, foreword, scope and all. The
+    sample corpus attributed the TRS's own opening pages to the QRS, so those
+    chunks cited the wrong document.
+    """
+    pages = [
+        page(1, "1.1 First document clause.\n1.2 Second clause.", name="A.md"),
+        page(2, "Trailing text with no heading of its own.", name="A.md"),
+        page(1, "# Second document\nFront matter, still no heading.", name="B.md"),
+        page(2, "2.1 Real clause of the second document.", name="B.md"),
+    ]
+    clauses = parse.split_into_clauses(pages)
+
+    for clause in clauses:
+        other = "B.md" if clause.source_file == "A.md" else "A.md"
+        assert all(
+            other not in (line or "")
+            for _page_number, line in clause.lines
+        ), f"{clause.clause_id!r} carries text from {other}"
+
+    by_file = {}
+    for clause in clauses:
+        by_file.setdefault(clause.source_file, []).append(clause)
+    assert "B.md" in by_file, "the second document produced no clauses at all"
+    assert any("Front matter" in c.text for c in by_file["B.md"])
+
+
 def test_bare_sub_clause_needs_a_seen_parent():
     """'7.2.1' alone on a line is a clause only when 7.2 (or 7) came first."""
     pages = [page(1, "7.2 Welding\n7.2.1\nShall be qualified.\n")]
