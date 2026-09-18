@@ -83,9 +83,18 @@ def main():
         help="skip LLM query expansion (cheaper, deterministic)",
     )
     parser.add_argument("--json", help="write raw per-question results here")
+    parser.add_argument(
+        "--answers",
+        type=int,
+        default=0,
+        metavar="N",
+        help="also run the full answer path on the first N questions and report "
+        "citation groundedness (costs N API calls)",
+    )
     args = parser.parse_args()
 
-    rows = evaluate(load_golden(), expand=not args.no_expand)
+    questions = load_golden()
+    rows = evaluate(questions, expand=not args.no_expand)
     n = len(rows)
 
     def rate(key, top=None):
@@ -122,6 +131,37 @@ def main():
     if args.json:
         Path(args.json).write_text(json.dumps(rows, indent=2))
         print(f"\nraw results -> {args.json}")
+
+    if args.answers:
+        report_groundedness(questions[: args.answers])
+
+
+def report_groundedness(questions):
+    """How often did the model try to cite something that does not exist?
+
+    Because validate_claims discards bad citations before the user sees them,
+    the interesting number is how much the guardrail had to catch.
+    """
+    import retrieval
+
+    accepted_total = rejected_total = answered = 0
+    print("\n=== answer groundedness ===")
+    for item in questions:
+        result = retrieval.ask(item["question"])
+        accepted_total += len(result["claims"])
+        rejected_total += len(result["rejected"])
+        answered += bool(result["claims"])
+        print(
+            f"  {item['id']:6s} claims {len(result['claims'])} "
+            f"rejected {len(result['rejected'])}"
+        )
+
+    total = accepted_total + rejected_total
+    print(f"\nquestions answered      {answered}/{len(questions)}")
+    print(f"claims shown            {accepted_total}")
+    print(f"fabrications caught     {rejected_total}")
+    if total:
+        print(f"citation validity       {accepted_total / total:.0%}")
 
 
 if __name__ == "__main__":

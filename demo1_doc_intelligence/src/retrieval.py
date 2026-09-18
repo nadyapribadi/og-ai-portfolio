@@ -16,6 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
 
 sys.path.insert(0, str(Path(__file__).parent))
+import answer as answer_mod  # noqa: E402
 import hybrid  # noqa: E402
 import routing  # noqa: E402
 from config import (  # noqa: E402
@@ -215,7 +216,7 @@ def _allowed_indices(metas, family, role):
     return allowed if len(allowed) >= MIN_ROUTED_CANDIDATES else None
 
 
-def search_chunks(vectorstore, question):
+def search_chunks(vectorstore, question, limit=None):
     """Route, retrieve with two strategies, fuse by rank, then rerank.
 
     Each stage is a separate signal: routing narrows the corpus, BM25 catches
@@ -256,7 +257,7 @@ def search_chunks(vectorstore, question):
     reranker = get_reranker()
     scores = reranker.predict([[question, c.page_content] for c in candidates])
     ranked = sorted(zip(scores, candidates), key=lambda pair: pair[0], reverse=True)
-    return [chunk for _, chunk in ranked[:FINAL_TOP_K]]
+    return [chunk for _, chunk in ranked[: limit or FINAL_TOP_K]]
 
 
 def build_context(chunks):
@@ -272,38 +273,78 @@ def build_context(chunks):
     return "\n\n".join(parts)
 
 
+NOT_FOUND = "This information is not found in the loaded documents."
+
+
+def _render(claims):
+    """Turn validated claims into the text the user reads."""
+    if not claims:
+        return NOT_FOUND
+    if len(claims) == 1:
+        claim = claims[0]
+        return (
+            f"{claim.text} (Source: {claim.source_file}, Page: {claim.page})"
+        )
+    lines = []
+    for claim in claims:
+        lines.append(
+            f"- {claim.text} (Source: {claim.source_file}, Page: {claim.page})"
+        )
+    return "\n".join(lines)
+
+
+def _generate(question, chunks):
+    """Ask for claims, then keep only the ones that verify against the excerpts."""
+    llm = ChatGroq(
+        model=GROQ_MODEL_QUALITY,
+        temperature=0,
+        api_key=os.getenv("GROQ_API_KEY"),
+    )
+    structured = answer_mod.structured_llm(llm)
+    if structured is None:
+        raise RuntimeError("the configured model cannot return structured output")
+
+    draft = structured.invoke(answer_mod.build_messages(question, build_context(chunks)))
+    accepted, rejected = answer_mod.validate_claims(draft, chunks)
+    return {
+        "answer": _render(accepted),
+        "claims": accepted,
+        "rejected": rejected,
+        "not_found": bool(draft.not_found) or not accepted,
+        "sources": list(
+            {c.metadata.get("source_file", "unknown") for c in chunks}
+        ),
+        "clauses": list(
+            {
+                c.metadata.get("clause_id", "")
+                for c in chunks
+                if c.metadata.get("clause_id")
+            }
+        ),
+        "chunks": chunks,
+    }
+
+
 def ask(question):
+    """Answer with citations that the system verified, not ones it was asked for."""
     global _model_check_done
     if not _model_check_done:
         validate_models(strict=True)
         _model_check_done = True
 
     vectorstore = load_vectorstore()
-    chunks = search_chunks(vectorstore, question)
-    context = build_context(chunks)
+    result = _generate(question, search_chunks(vectorstore, question))
 
-    llm = ChatGroq(
-        model=GROQ_MODEL_QUALITY,
-        temperature=0,
-        api_key=os.getenv("GROQ_API_KEY"),
-    )
-    messages = [
-        SystemMessage(content=SYSTEM_PROMPT.format(context=context)),
-        HumanMessage(content=question),
-    ]
-    response = llm.invoke(messages)
+    # Bounded retry: only when retrieval or the model produced nothing usable do
+    # we pay for a second attempt, and then with a wider net.
+    if not result["claims"] and result["rejected"]:
+        wider = search_chunks(vectorstore, question, limit=FINAL_TOP_K * 2)
+        retry = _generate(question, wider)
+        if retry["claims"]:
+            retry["retried"] = True
+            return retry
 
-    sources = list({c.metadata.get("source_file", "unknown") for c in chunks})
-    clauses = list(
-        {c.metadata.get("clause_id", "") for c in chunks if c.metadata.get("clause_id")}
-    )
-
-    return {
-        "answer": _content_to_text(response.content),
-        "sources": sources,
-        "clauses": clauses,
-        "chunks": chunks,
-    }
+    return result
 
 
 if __name__ == "__main__":

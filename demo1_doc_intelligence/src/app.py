@@ -597,6 +597,16 @@ if question:
             # Stream answer
             st.write_stream(stream_text(result["answer"]))
 
+            # Verified quotes — the evidence behind each claim
+            if result.get("claims"):
+                with st.expander(f"✅ Verified sources · {len(result['claims'])} claims"):
+                    for claim in result["claims"]:
+                        st.markdown(
+                            f"`{claim.source_file}` · "
+                            f"§{claim.clause_id or '-'} · p.{claim.page}"
+                        )
+                        st.code(claim.quote, language=None)
+
             # Sources — friendly names
             if result["sources"]:
                 st.markdown(render_sources(result["sources"]), unsafe_allow_html=True)
