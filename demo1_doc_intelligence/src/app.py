@@ -372,8 +372,15 @@ def get_vectorstore():
     # A fresh clone has no index. Build one from whatever documents exist
     # instead of failing — that is what makes the demo portable across hosts.
     import ingest
+    import retrieval
+
     with st.spinner("Building the document index — first run only, ~1 minute..."):
-        ingest.ensure_vectorstore()
+        rebuilt = ingest.ensure_vectorstore()
+    if rebuilt:
+        # A rebuild deletes and recreates the directory. Any client opened
+        # before that point is now holding a deleted database, so drop it —
+        # otherwise the next write fails with SQLITE_READONLY_DBMOVED.
+        retrieval._vs_cache.clear()
     return load_vectorstore("en")
 
 
@@ -426,6 +433,23 @@ def render_chunks_expander(chunks, key_suffix=""):
 # ─────────────────────────────────────────────
 # SIDEBAR
 # ─────────────────────────────────────────────
+
+# Build or load the index before anything else touches it. The sidebar needs to
+# know which corpus is indexed in order to offer matching sample questions, and
+# opening Chroma before the build would leave a client holding a directory that
+# the build then replaces.
+try:
+    vectorstore = get_vectorstore()
+    chunk_count = vectorstore._collection.count()
+    doc_count = len(DOCUMENT_SOURCES)
+except Exception as exc:
+    # The index is built on first run, so reaching here means the build itself
+    # failed. Show the real traceback instead of a hint that hides it — that is
+    # the only way to diagnose this on a host you cannot shell into.
+    st.error("**Could not load or build the document index.**")
+    st.exception(exc)
+    st.stop()
+
 with st.sidebar:
     # Branding
     st.markdown("""
@@ -525,18 +549,6 @@ if _missing_models:
     st.stop()
 
 # Load vectorstore
-try:
-    vectorstore = get_vectorstore()
-    chunk_count = vectorstore._collection.count()
-    doc_count = len(DOCUMENT_SOURCES)
-except Exception:
-    # The index is built on first run, so reaching here means the build itself
-    # failed. Show the real traceback instead of a hint that hides it — that is
-    # the only way to diagnose this on a host you cannot shell into.
-    st.error("**Could not load or build the document index.**")
-    st.exception(sys.exc_info()[1])
-    st.stop()
-
 # Header with index stats
 st.markdown(f"""
 <div class="app-header">
