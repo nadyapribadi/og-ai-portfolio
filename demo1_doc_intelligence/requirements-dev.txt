@@ -1,0 +1,4 @@
+-r requirements.txt
+
+# Test tooling (not needed to run the app)
+pytest>=8.0

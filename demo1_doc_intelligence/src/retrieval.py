@@ -1,4 +1,6 @@
 import os
+import re
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from langdetect import detect, LangDetectException
@@ -7,7 +9,11 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
 
-load_dotenv()
+sys.path.insert(0, str(Path(__file__).parent))
+from config import LLM_MODEL_FAST, LLM_MODEL_QUALITY  # noqa: E402
+
+# Load demo1's own .env, wherever the process was started from.
+load_dotenv(Path(__file__).parent.parent / ".env")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 VECTORSTORE_EN       = Path(__file__).parent.parent / "data" / "vectorstore_en"
@@ -16,8 +22,9 @@ MODEL_EN             = "all-MiniLM-L6-v2"
 MODEL_MULTI          = "paraphrase-multilingual-MiniLM-L12-v2"
 COLLECTION           = "og_docs"
 TOP_K                = 4
-GROQ_MODEL_FAST      = "llama-3.1-8b-instant"
-GROQ_MODEL_QUALITY   = "llama-3.3-70b-versatile"
+# Model IDs live in config.py — set them there, not here.
+GROQ_MODEL_FAST      = LLM_MODEL_FAST
+GROQ_MODEL_QUALITY   = LLM_MODEL_QUALITY
 MULTILINGUAL_ENABLED = False
 
 SYSTEM_PROMPT = """You are an expert assistant for upstream oil and gas operations,
@@ -75,11 +82,73 @@ def detect_language(text):
         return "en"
 
 
+def _content_to_text(content):
+    """Normalise a LangChain message payload to plain text.
+
+    Some providers return a list of content blocks instead of a string;
+    calling .strip() on that raises AttributeError.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                parts.append(str(block.get("text") or block.get("content") or ""))
+        return "\n".join(parts)
+    return "" if content is None else str(content)
+
+
+_model_check_done = False
+
+
+def validate_models(models=None, strict=False):
+    """Check the configured models still exist on this account.
+
+    Returns (missing, available). With strict=True raises RuntimeError instead
+    of warning, so callers can fail loudly with a useful message.
+    """
+    wanted = list(dict.fromkeys(models or [GROQ_MODEL_FAST, GROQ_MODEL_QUALITY]))
+    try:
+        from groq import Groq
+        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+        available = sorted(m.id for m in client.models.list().data)
+    except Exception as exc:                      # network, auth, quota ...
+        if strict:
+            raise RuntimeError(f"Could not verify Groq models: {exc}") from exc
+        return [], []
+
+    missing = [m for m in wanted if m not in available]
+    if missing:
+        message = (
+            "These configured models are no longer available on this account: "
+            + ", ".join(missing)
+            + "\nAvailable models: "
+            + ", ".join(available)
+            + "\nUpdate LLM_MODEL_FAST / LLM_MODEL_QUALITY in config.py."
+        )
+        if strict:
+            raise RuntimeError(message)
+        print("WARNING: " + message)
+    return missing, available
+
+
 def translate_to_english(text):
     from deep_translator import GoogleTranslator
     return GoogleTranslator(source='auto', target='en').translate(text)
 
-def expand_query(question):
+
+_BULLET_RE = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s*")
+
+
+def expand_query(question, max_variants=3):
+    """Generate search variants. The original question is always first.
+
+    Never raises on unexpected model output — if the model returns nothing
+    usable, we fall back to the original question alone.
+    """
     llm = ChatGroq(
         model=GROQ_MODEL_FAST,
         temperature=0.3,
@@ -88,16 +157,24 @@ def expand_query(question):
     messages = [
         SystemMessage(content=(
             "You are helping search an oil and gas document database. "
-            "Given a question, generate 3 search queries that would find the answer. "
+            f"Given a question, generate {max_variants} search queries that would find the answer. "
             "Make each query use DIFFERENT vocabulary than the original — "
             "focus on the specific content, actions, or procedures the answer would contain. "
-            "Return only the 3 queries, one per line, nothing else."
+            f"Return only the {max_variants} queries, one per line, nothing else."
         )),
         HumanMessage(content=question),
     ]
-    response = llm.invoke(messages)
-    variants = [v.strip() for v in response.content.strip().split("\n") if v.strip()]
-    return [question] + variants
+    text = _content_to_text(llm.invoke(messages).content)
+
+    variants = []
+    for line in text.splitlines():
+        line = _BULLET_RE.sub("", line).strip()
+        if not line or line.lower() == question.strip().lower():
+            continue
+        if line not in variants:
+            variants.append(line)
+
+    return [question] + variants[:max_variants]
 
 def load_vectorstore(lang):
     if not MULTILINGUAL_ENABLED:
@@ -169,8 +246,13 @@ def build_context(chunks):
     return "\n\n".join(parts)
 
 
-def ask(question):
-    lang = detect_language(question)
+def ask(question, lang_override="auto"):
+    global _model_check_done
+    if not _model_check_done:
+        validate_models(strict=True)
+        _model_check_done = True
+
+    lang = lang_override if lang_override != "auto" else detect_language(question)
     search_question = question
 
     if lang != "en":

@@ -90,3 +90,15 @@ SOURCE_FRIENDLY = {
     "S-719Qv2025-01 QRS.pdf":                     "S-719 Water Mist (Quality)",
     "S-719Jv2025-01 TRS with Justification.pdf":  "S-719 Water Mist (Justification)",
 }
+
+# ─────────────────────────────────────────────
+# LLM settings
+# ─────────────────────────────────────────────
+# Groq retires model IDs over time. These are validated at startup (see
+# validate_models() in retrieval.py) so a retired model produces a readable
+# message listing what IS available, instead of a bare 404 mid-question.
+#
+# When a model disappears, update the IDs here — nowhere else.
+LLM_PROVIDER      = "groq"
+LLM_MODEL_FAST    = "openai/gpt-oss-20b"    # query expansion — cheap and quick
+LLM_MODEL_QUALITY = "openai/gpt-oss-120b"   # answering — quality matters

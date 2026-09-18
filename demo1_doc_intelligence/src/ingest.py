@@ -7,7 +7,8 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-load_dotenv()
+# Load demo1's own .env, wherever the process was started from.
+load_dotenv(Path(__file__).parent.parent / ".env")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 DOCS_DIR          = Path(__file__).parent.parent / "data" / "raw_docs"
@@ -29,7 +30,8 @@ def load_pdfs():
     for pdf_path in pdf_files:
         print(f"  Loading: {pdf_path.name}")
         with pdfplumber.open(str(pdf_path)) as pdf:
-            for page_num, page in enumerate(pdf.pages):
+            # start=1 so citations match the page numbers a human sees in the PDF.
+            for page_num, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
 
                 # Convert tables to markdown — preserves column structure

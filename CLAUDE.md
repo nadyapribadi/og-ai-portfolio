@@ -180,18 +180,24 @@ GROQ_API_KEY=gsk_...
 og-ai-portfolio/
 ├── CLAUDE.md
 ├── README.md
-├── .env                                   ← gitignored
-├── requirements.txt
 ├── demo1_doc_intelligence/
+│   ├── README.md                          ← demo1 detail + troubleshooting
+│   ├── requirements.txt                   ← demo1 only (demo2/3 differ)
+│   ├── requirements-dev.txt               ← pytest
+│   ├── .env                               ← gitignored, copy .env.example
+│   ├── .env.example
 │   ├── data/
 │   │   ├── raw_docs/                      ← gitignored
 │   │   ├── vectorstore_en/                ← gitignored
 │   │   └── vectorstore_multi/             ← gitignored
+│   ├── docs/plans/                        ← implementation plans
+│   ├── tests/                             ← pytest smoke tests
 │   └── src/
 │       ├── ingest.py                      ← PDF → chunks → vectorstore
 │       ├── retrieval.py                   ← question → rerank → answer
+│       ├── config.py                      ← branding + LLM settings
 │       └── app.py                         ← Streamlit UI
-├── demo2_incident_intelligence/
+├── demo2_epci_data/
 │   └── src/
 │       ├── download_data.py
 │       ├── build_database.py

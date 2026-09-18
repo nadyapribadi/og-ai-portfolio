@@ -4,11 +4,11 @@ import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from retrieval import ask, load_vectorstore
+from retrieval import ask, load_vectorstore, validate_models
 from config import (
     APP_TITLE, APP_SUBTITLE,
     DOCUMENT_SOURCES, SAMPLE_QUESTIONS,
-    CAPABILITY_CARDS, SOURCE_FRIENDLY,
+    CAPABILITY_CARDS, SOURCE_FRIENDLY, LLM_MODEL_QUALITY,
 )
 
 # ─────────────────────────────────────────────
@@ -380,6 +380,12 @@ def get_vectorstore():
     return load_vectorstore("en")
 
 
+@st.cache_resource(show_spinner=False)
+def get_model_status():
+    """Validate model IDs once per app instance, not on every rerun."""
+    return validate_models()
+
+
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
@@ -492,10 +498,10 @@ with st.sidebar:
     st.divider()
 
     # Powered by
-    st.markdown("""
+    st.markdown(f"""
     <div class="powered-by">
         POWERED BY<br>
-        <span>Groq</span> · <span>LLaMA 3.3 70B</span><br>
+        <span>Groq</span> · <span>{LLM_MODEL_QUALITY}</span><br>
         <span>ChromaDB</span> · <span>sentence-transformers</span><br>
         <span>LangChain</span> · <span>Streamlit</span>
     </div>
@@ -511,6 +517,20 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 # MAIN AREA
 # ─────────────────────────────────────────────
+
+# Verify the configured LLM models still exist before the user asks anything.
+# Groq retires model IDs; without this the app dies mid-question with a 404.
+_missing_models, _available_models = get_model_status()
+if _missing_models:
+    st.error(
+        "**Configured model(s) are no longer available on this account.**\n\n"
+        + "\n".join(f"- `{m}`" for m in _missing_models)
+        + "\n\n**Available on this account:**\n\n"
+        + ", ".join(f"`{m}`" for m in _available_models)
+        + "\n\nUpdate `LLM_MODEL_FAST` / `LLM_MODEL_QUALITY` in `config.py` "
+          "and restart the app."
+    )
+    st.stop()
 
 # Load vectorstore
 try:

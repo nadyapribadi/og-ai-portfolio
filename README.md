@@ -65,13 +65,24 @@ Get cited answers with source document and page number.
 git clone https://github.com/nadyapribadi/og-ai-portfolio
 cd og-ai-portfolio
 python -m venv venv && source venv/bin/activate
-pip install -r requirements.txt
+pip install -r demo1_doc_intelligence/requirements.txt
 
-# Add GROQ_API_KEY to .env — free at console.groq.com
-# Add your PDFs to demo1_doc_intelligence/data/raw_docs/
+# Add your Groq key — free at console.groq.com
+cp demo1_doc_intelligence/.env.example demo1_doc_intelligence/.env
+# then paste your key into that file
+
+# Add your PDFs (see demo1_README.md for the document pack)
+mkdir -p demo1_doc_intelligence/data/raw_docs
 
 python demo1_doc_intelligence/src/ingest.py   # ~30 seconds
 streamlit run demo1_doc_intelligence/src/app.py
+```
+
+Run the tests:
+
+```bash
+pip install -r demo1_doc_intelligence/requirements-dev.txt
+python -m pytest demo1_doc_intelligence/tests -q
 ```
 
 ---
