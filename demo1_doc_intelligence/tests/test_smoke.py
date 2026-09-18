@@ -61,11 +61,14 @@ def test_index_presence_is_checked_without_opening_chroma(tmp_path, monkeypatch)
     store = tmp_path / "store"
     store.mkdir()
     monkeypatch.setattr(ingest, "VECTORSTORE", store)
+    monkeypatch.setattr(ingest, "index_signature", lambda: "signature-current")
     assert ingest.index_present() is False
 
     database = store / "chroma.sqlite3"
     database.write_bytes(b"not a database at all")
     assert ingest.index_present() is False, "an unreadable file is not an index"
+
+    (store / ingest.SIGNATURE_FILE).write_text("signature-current")
 
     database.unlink()
     connection = sqlite3.connect(database)
@@ -79,6 +82,37 @@ def test_index_presence_is_checked_without_opening_chroma(tmp_path, monkeypatch)
     connection.commit()
     connection.close()
     assert ingest.index_present() is True
+
+
+def test_an_index_from_older_code_is_rebuilt(tmp_path, monkeypatch):
+    """A parser fix has to reach the deployed app.
+
+    The container keeps its filesystem between updates, so an index built by the
+    previous parser stayed in place and the demo kept answering from stale,
+    mis-attributed chunks after the fix was deployed.
+    """
+    import sqlite3
+
+    import ingest
+
+    store = tmp_path / "store"
+    store.mkdir()
+    monkeypatch.setattr(ingest, "VECTORSTORE", store)
+
+    connection = sqlite3.connect(store / "chroma.sqlite3")
+    connection.execute("CREATE TABLE embeddings (id TEXT)")
+    connection.execute("INSERT INTO embeddings VALUES ('a')")
+    connection.commit()
+    connection.close()
+
+    monkeypatch.setattr(ingest, "index_signature", lambda: "signature-now")
+    assert ingest.index_present() is False, "no signature: built by older code"
+
+    (store / ingest.SIGNATURE_FILE).write_text("signature-then")
+    assert ingest.index_present() is False, "different signature: code changed"
+
+    (store / ingest.SIGNATURE_FILE).write_text("signature-now\n")
+    assert ingest.index_present() is True, "matching signature: keep the index"
 
 
 def test_chroma_client_cache_can_be_cleared():

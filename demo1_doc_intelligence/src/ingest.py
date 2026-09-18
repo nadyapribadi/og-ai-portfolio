@@ -10,6 +10,7 @@ Run:  python demo1_doc_intelligence/src/ingest.py
 import shutil
 import sys
 import re
+import hashlib
 import sqlite3
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from config import (  # noqa: E402
     COLLECTION_NAME,
     DOCS_DIR_OVERRIDE,
     EMBED_MODEL,
+    EMBED_ONNX_FILE,
     RAW_DOCS_DIR,
     SAMPLE_DOCS_DIR,
     VECTORSTORE_DIR,
@@ -41,6 +43,9 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 DEMO_ROOT    = Path(__file__).parent.parent
 VECTORSTORE  = VECTORSTORE_DIR
 MIN_PAGE_LEN = 20      # skip cover pages that carry no extractable text
+
+# Written next to chroma.sqlite3 after a successful build.
+SIGNATURE_FILE = "index_signature"
 
 # Text formats are supported so the committed sample corpus needs no PDF —
 # which keeps it licence-free, diffable in git and reviewable in a pull request.
@@ -184,6 +189,33 @@ def build_vectorstore(chunks):
         persist_directory=str(VECTORSTORE),
     )
     print(f"  done — {vectorstore._collection.count()} chunks indexed")
+    # Record what built this, so a later code change cannot keep serving it.
+    (VECTORSTORE / SIGNATURE_FILE).write_text(index_signature(), encoding="utf-8")
+
+
+def index_signature():
+    """Fingerprint of everything that decides what the index contains.
+
+    The deployed app keeps its container filesystem between code updates, so an
+    index built by an older parser stayed in place and kept answering from
+    stale, mis-attributed chunks: the fix was pushed, the app was redeployed,
+    and the demo still held the old 17 chunks. The parser and the chunking are
+    code, so the index has to be invalidated by code.
+
+    Hashing the two modules is deliberate — it needs no one to remember to bump
+    a version when the chunking changes. Changing the collection, the embedding
+    model or the chunk budget invalidates the index for the same reason.
+    """
+    material = [
+        COLLECTION_NAME,
+        EMBED_MODEL,
+        EMBED_ONNX_FILE,
+        str(CHUNK_WINDOW_FRACTION),
+    ]
+    for module in ("parse.py", "ingest.py"):
+        source = (Path(__file__).parent / module).read_bytes()
+        material.append(hashlib.sha256(source).hexdigest())
+    return hashlib.sha256("|".join(material).encode()).hexdigest()[:16]
 
 
 def build_index():
@@ -233,7 +265,14 @@ def index_present():
     * A file-size check is not enough: the moment anything opens Chroma on a
       directory it initialises a full-size schema, so an empty index still
       looks like a healthy one.
+
+    It also has to have been built by the code that is running now. An index
+    whose signature is missing or different is rebuilt rather than trusted —
+    that is what makes a parser fix actually reach the deployed app.
     """
+    signature = VECTORSTORE / SIGNATURE_FILE
+    if not signature.exists() or signature.read_text(encoding="utf-8").strip() != index_signature():
+        return False
     database = VECTORSTORE / "chroma.sqlite3"
     if not database.exists():
         return False

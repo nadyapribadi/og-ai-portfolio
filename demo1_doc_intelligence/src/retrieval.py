@@ -336,6 +336,17 @@ def _generate(question, chunks):
 
     draft = llm.with_fallback(GROQ_MODEL_QUALITY, call)
     accepted, rejected = answer_mod.validate_claims(draft, chunks)
+    if rejected and not accepted:
+        # The answer is about to say "not found"; the log should say why, since
+        # the reason is the difference between a retrieval problem and a
+        # guardrail that was too strict.
+        print(
+            "  all claims rejected: "
+            + "; ".join(
+                f"§{claim.clause_id or '-'} p.{claim.page} ({reason})"
+                for claim, reason in rejected[:5]
+            )
+        )
     return {
         "answer": _render(accepted),
         "claims": accepted,

@@ -599,7 +599,7 @@ st.markdown(f"""
     </div>
     <div class="index-badge">
         <span>●</span> {doc_count} documents<br>
-        <span>{chunk_count}</span> pages indexed
+        <span>{chunk_count}</span> passages indexed
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -681,6 +681,26 @@ if question:
                         st.markdown(
                             f"`{claim.source_file}` · "
                             f"§{claim.clause_id or '-'} · p.{claim.page}"
+                        )
+                        st.code(claim.quote, language=None)
+
+            # "Not found" with rejected claims underneath is the one failure a
+            # visitor cannot diagnose from the outside — the excerpts looked
+            # right and the answer still was not there. Show what the guardrail
+            # threw away, so the next report of this is evidence instead of a
+            # guess.
+            if result.get("not_found") and result.get("rejected"):
+                with st.expander(
+                    f"🔎 Why “not found” · {len(result['rejected'])} claim(s) rejected"
+                ):
+                    st.markdown(
+                        "The model proposed these, but they could not be verified "
+                        "against the retrieved excerpts:"
+                    )
+                    for claim, reason in result["rejected"]:
+                        st.markdown(
+                            f"- `{claim.source_file}` · §{claim.clause_id or '-'} · "
+                            f"p.{claim.page} — _{reason}_"
                         )
                         st.code(claim.quote, language=None)
 
