@@ -216,26 +216,28 @@ def build_index():
     return len(chunks)
 
 
+def index_present():
+    """Is there an index on disk already?
+
+    Deliberately does NOT open Chroma to find out. Opening a client and then
+    deleting its directory from underneath it makes SQLite fail the next write
+    with SQLITE_READONLY_DBMOVED (1032) — "attempt to write a readonly
+    database". That is exactly how the first deployed build died, and it looked
+    like a read-only filesystem rather than what it was.
+    """
+    database = VECTORSTORE / "chroma.sqlite3"
+    return database.exists() and database.stat().st_size > 0
+
+
 def ensure_vectorstore():
-    """Build the index when it is missing or empty.
+    """Build the index when it is missing.
 
     This is what makes the app portable: a fresh clone, a CI runner or a
     Streamlit Cloud deploy can start with no committed index and build one from
     whatever documents are present. Returns True when it built something.
     """
-    if VECTORSTORE.exists():
-        try:
-            from langchain_chroma import Chroma
-
-            existing = Chroma(
-                collection_name=COLLECTION_NAME,
-                embedding_function=build_embeddings(),
-                persist_directory=str(VECTORSTORE),
-            )
-            if existing._collection.count() > 0:
-                return False
-        except Exception:                           # noqa: BLE001
-            pass                                    # unreadable → rebuild
+    if index_present():
+        return False
     build_index()
     return True
 

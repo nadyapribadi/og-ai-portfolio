@@ -20,9 +20,15 @@ def _default_vectorstore():
     for candidate in candidates:
         try:
             candidate.parent.mkdir(parents=True, exist_ok=True)
-            probe = candidate.parent / ".write_probe"
-            probe.touch()
-            probe.unlink()
+            # A real write test: create a directory and a file inside it, the
+            # way the vector store will. A bare touch() can pass on a mount
+            # that then refuses to create new content.
+            probe_dir = candidate.parent / ".write_probe"
+            probe_dir.mkdir(exist_ok=True)
+            probe_file = probe_dir / "probe"
+            probe_file.write_text("x", encoding="utf-8")
+            probe_file.unlink()
+            probe_dir.rmdir()
             return candidate
         except OSError:
             continue

@@ -47,6 +47,24 @@ def test_vectorstore_path_is_configurable(monkeypatch):
     assert isinstance(config.VECTORSTORE_DIR, Path)
 
 
+def test_index_presence_is_checked_without_opening_chroma(tmp_path, monkeypatch):
+    """Opening Chroma and then deleting its directory is what made the deployed
+    build fail with SQLITE_READONLY_DBMOVED. Presence must be a file check."""
+    import ingest
+
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setattr(ingest, "VECTORSTORE", empty)
+    assert ingest.index_present() is False
+
+    database = empty / "chroma.sqlite3"
+    database.write_bytes(b"")
+    assert ingest.index_present() is False, "an empty database is not an index"
+
+    database.write_bytes(b"sqlite-format-bytes")
+    assert ingest.index_present() is True
+
+
 @pytest.mark.skipif(not os.getenv("GROQ_API_KEY"), reason="requires GROQ_API_KEY")
 def test_live_answer_is_cited():
     result = retrieval.ask("What are the life saving rules?")
