@@ -12,9 +12,9 @@ from retrieval import (
     validate_models,
 )
 from config import (
-    APP_TITLE, APP_SUBTITLE,
-    DOCUMENT_SOURCES, SAMPLE_QUESTIONS, SAMPLE_QUESTIONS_SAMPLE,
-    CAPABILITY_CARDS, SOURCE_FRIENDLY, LLM_MODEL_QUALITY,
+    APP_TITLE,
+    DOCUMENT_SOURCES, SOURCE_FRIENDLY, LLM_MODEL_QUALITY,
+    corpus_content,
 )
 
 # ─────────────────────────────────────────────
@@ -472,6 +472,10 @@ except Exception as exc:
     st.exception(exc)
     st.stop()
 
+# What the sidebar offers and what the empty state promises must match the
+# corpus that is actually indexed — questions, capability cards and subtitle.
+question_set, capability_cards, subtitle = corpus_content(get_corpus_families())
+
 with st.sidebar:
     # Branding
     st.markdown("""
@@ -496,11 +500,6 @@ with st.sidebar:
 
     # Sample questions — with visual category separation
     st.markdown('<div class="sidebar-label">💡 Try asking</div>', unsafe_allow_html=True)
-    question_set = (
-        SAMPLE_QUESTIONS
-        if "IOGP 459" in get_corpus_families()
-        else SAMPLE_QUESTIONS_SAMPLE
-    )
     for category, questions in question_set.items():
         st.markdown(f'<div class="cat-header">{category}</div>', unsafe_allow_html=True)
         for q in questions:
@@ -595,7 +594,7 @@ st.markdown(f"""
 <div class="app-header">
     <div>
         <div class="app-title">🛢️ {APP_TITLE}</div>
-        <div class="app-subtitle">{APP_SUBTITLE}</div>
+        <div class="app-subtitle">{subtitle}</div>
     </div>
     <div class="index-badge">
         <span>●</span> {doc_count} documents<br>
@@ -611,7 +610,7 @@ if not st.session_state.messages:
                 <div class="capability-card-title">{c["title"]}</div>
                 <div class="capability-card-desc">{c["desc"]}</div>
             </div>"""
-        for c in CAPABILITY_CARDS
+        for c in capability_cards
     ])
     st.markdown(f"""
     <div class="empty-state">

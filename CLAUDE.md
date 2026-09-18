@@ -103,6 +103,13 @@ document boundary closes the running clause. Without that, the next document's
 title, foreword and scope were appended to the previous document's last clause,
 and those chunks cited the wrong file.
 
+**The front page follows the corpus.** Questions, capability cards and subtitle
+all switch on what is indexed: the full document pack gets the IOGP/JIP33 story,
+the bundled sample gets its own. Advertising life-saving rules next to an index
+of two synthetic deluge-skid files is a promise one click disproves. CI builds
+the sample corpus and asserts every question the sidebar offers there retrieves
+its own answer, so the promise is a test rather than a hope.
+
 **Providers are config, not code.** `llm.py` builds chat models from
 `LLM_PROVIDER`, validates model ids at startup (Groq retires models, which is
 how this app died) and falls back to the next model on a rate limit or a

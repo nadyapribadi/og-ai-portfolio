@@ -27,17 +27,24 @@ jobs:
       - name: Install dependencies
         run: pip install -r demo1_doc_intelligence/requirements-dev.txt
 
-      - name: Unit tests
-        run: python -m pytest demo1_doc_intelligence/tests -q
-
       # The real IOGP/JIP33 corpus is copyrighted and is never committed, so CI
       # exercises the whole pipeline against the bundled sample corpus instead.
-      # This is what proves a fresh clone is actually runnable.
+      # This is what proves a fresh clone is actually runnable — and it is the
+      # same corpus the hosted app answers from, so the tests below cover the
+      # path a visitor to the demo takes.
       - name: Build the index from the bundled sample corpus
         env:
           DEMO1_DOCS_DIR: demo1_doc_intelligence/sample_docs
           DEMO1_VECTORSTORE: /tmp/vs
         run: python demo1_doc_intelligence/src/ingest.py
+
+      # Runs against the sample index built above, which is why the sidebar's
+      # questions are checked for retrievable answers here: a first click that
+      # returns "not found" is the demo failing in public.
+      - name: Tests
+        env:
+          DEMO1_VECTORSTORE: /tmp/vs
+        run: python -m pytest demo1_doc_intelligence/tests -q
 
       - name: Retrieval smoke test
         env:

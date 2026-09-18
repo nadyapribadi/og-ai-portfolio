@@ -50,6 +50,11 @@ drop PDFs into `data/raw_docs/` (which then take precedence over the sample).
 
 ---
 
+Questions, capability cards and the subtitle follow whichever corpus is
+indexed: the full pack gets the IOGP/JIP33 questions and cards, the bundled
+sample gets its own. CI asserts that every question the sample corpus offers
+retrieves its own answer.
+
 ## In Scope
 
 - Text-based PDFs (digitally created, not scanned)

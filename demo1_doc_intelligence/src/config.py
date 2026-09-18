@@ -108,7 +108,7 @@ SAMPLE_QUESTIONS_SAMPLE = {
     ],
     "🇮🇩 Bahasa Indonesia": [
         "Berapa tekanan desain minimum untuk deluge skid?",
-        "Apa yang harus disiapkan sebelum pengujian tekanan?",
+        "Berapa lama pengujian tekanan hidrostatik berlangsung?",
     ],
 }
 
@@ -144,6 +144,61 @@ CAPABILITY_CARDS = [
         ),
     },
 ]
+
+# Shown when the index holds the bundled sample corpus. The cards above describe
+# what the full document pack can do; advertising IOGP life-saving rules and
+# Tier 1/2 process safety events next to an index of two synthetic deluge-skid
+# files is a promise the app cannot keep, and a visitor can check it with one
+# click. Cards follow the corpus, exactly like the sample questions do.
+CAPABILITY_CARDS_SAMPLE = [
+    {
+        "title": "📐 Design requirements",
+        "desc": (
+            "Minimum design pressure, ingress protection rating, cable support "
+            "and tag plates — the technical requirements of the bundled S-900 "
+            "deluge skid specification."
+        ),
+    },
+    {
+        "title": "✅ Inspection & testing",
+        "desc": (
+            "Hydrostatic pressure testing and its duration, the test medium, "
+            "inspection points, material and welding certification."
+        ),
+    },
+    {
+        "title": "📄 Documentation & conformity",
+        "desc": (
+            "Manufacturing record book contents, language of documentation, "
+            "conformity assessment, concession requests."
+        ),
+    },
+    {
+        "title": "🇮🇩 Bahasa Indonesia",
+        "desc": (
+            "Tanya langsung dalam Bahasa Indonesia — pencarian dan jawaban "
+            "ditangani dalam bahasa yang sama, tanpa terjemahan."
+        ),
+    },
+]
+
+
+def corpus_content(families):
+    """Questions, cards and subtitle for the corpus that is actually indexed.
+
+    `families` comes from retrieval.corpus_families(). The IOGP reports are the
+    marker: whoever indexes them has the full document pack and gets the full
+    story; everyone else is running the bundled sample and gets the sample's.
+    """
+    full = "IOGP 459" in families
+    if full:
+        return SAMPLE_QUESTIONS, CAPABILITY_CARDS, APP_SUBTITLE
+    return (
+        SAMPLE_QUESTIONS_SAMPLE,
+        CAPABILITY_CARDS_SAMPLE,
+        "Ask questions from the bundled S-900 deluge skid specification "
+        "(synthetic, licence-free)",
+    )
 
 # Friendly display names for raw PDF filenames
 # Used in source citations — maps filename → readable name
