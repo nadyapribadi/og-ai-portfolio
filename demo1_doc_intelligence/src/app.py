@@ -4,7 +4,13 @@ import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from retrieval import ask, load_vectorstore, validate_models
+from retrieval import (
+    ask,
+    corpus_sources,
+    load_vectorstore,
+    rerank_strategy,
+    validate_models,
+)
 from config import (
     APP_TITLE, APP_SUBTITLE,
     DOCUMENT_SOURCES, SAMPLE_QUESTIONS, SAMPLE_QUESTIONS_SAMPLE,
@@ -28,6 +34,12 @@ try:
         os.environ.setdefault(_key, str(_value))
 except Exception:
     pass          # no secrets configured — local .env is used instead
+
+# Retrieval works without a key; answering does not. Without this check the app
+# renders perfectly and then fails on the first question with a client-library
+# message ("the api_key client option must be set") that never says where to set
+# it — which is exactly what a visitor to the deploy saw.
+HAS_LLM_KEY = bool(os.getenv("GROQ_API_KEY"))
 
 # ─────────────────────────────────────────────
 # CSS
@@ -441,7 +453,17 @@ def render_chunks_expander(chunks, key_suffix=""):
 try:
     vectorstore = get_vectorstore()
     chunk_count = vectorstore._collection.count()
-    doc_count = len(DOCUMENT_SOURCES)
+    # The sidebar lists what is indexed, not what is configured to be indexed:
+    # on a host without the copyrighted PDFs the index holds the bundled
+    # samples, and claiming the full document pack there would be a lie a
+    # visitor can check.
+    indexed_sources = corpus_sources()
+    listed_sources = (
+        [friendly_source(name) for name in indexed_sources]
+        if indexed_sources
+        else list(DOCUMENT_SOURCES)
+    )
+    doc_count = len(listed_sources)
 except Exception as exc:
     # The index is built on first run, so reaching here means the build itself
     # failed. Show the real traceback instead of a hint that hides it — that is
@@ -467,7 +489,7 @@ with st.sidebar:
 
     # Document sources
     st.markdown('<div class="sidebar-label">📚 Document Sources</div>', unsafe_allow_html=True)
-    for name in DOCUMENT_SOURCES:
+    for name in listed_sources:
         st.markdown(f'<div class="doc-item">{name}</div>', unsafe_allow_html=True)
 
     st.divider()
@@ -514,12 +536,20 @@ with st.sidebar:
     st.divider()
 
     # Powered by
+    rerank_label = (
+        "mmarco cross-encoder"
+        if rerank_strategy() == "cross-encoder"
+        else "late interaction · memory-tight host"
+    )
     st.markdown(f"""
     <div class="powered-by">
         POWERED BY<br>
         <span>Groq</span> · <span>{LLM_MODEL_QUALITY}</span><br>
-        <span>ChromaDB</span> · <span>sentence-transformers</span><br>
+        <span>ChromaDB</span> · <span>ONNX Runtime</span><br>
         <span>LangChain</span> · <span>Streamlit</span>
+        <br><br>RETRIEVAL<br>
+        <span>multilingual-e5-small</span><br>
+        <span>{rerank_label}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -536,6 +566,17 @@ with st.sidebar:
 
 # Verify the configured LLM models still exist before the user asks anything.
 # Groq retires model IDs; without this the app dies mid-question with a 404.
+if not HAS_LLM_KEY:
+    st.error(
+        "**No Groq API key configured — the app can search, but it cannot answer.**\n\n"
+        "Add `GROQ_API_KEY` and restart:\n\n"
+        "- **Streamlit Cloud:** open the app menu → *Settings* → *Secrets* and add\n"
+        '  `GROQ_API_KEY = "gsk_..."`\n'
+        "- **Local:** copy `demo1_doc_intelligence/.env.example` to "
+        "`demo1_doc_intelligence/.env` and fill it in.\n\n"
+        "A free key takes a minute: https://console.groq.com/keys"
+    )
+
 _missing_models, _available_models = get_model_status()
 if _missing_models:
     st.error(
@@ -602,7 +643,8 @@ for msg in st.session_state.messages:
 
 # ── INPUT HANDLING ──
 question = st.chat_input(
-    "Ask about upstream O&G standards, safety rules, equipment specifications..."
+    "Ask about upstream O&G standards, safety rules, equipment specifications...",
+    disabled=not HAS_LLM_KEY,
 )
 
 if not question and st.session_state.pending_question:

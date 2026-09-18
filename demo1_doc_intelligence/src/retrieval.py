@@ -21,14 +21,24 @@ import routing  # noqa: E402
 from config import (  # noqa: E402
     CANDIDATE_K,
     COLLECTION_NAME,
+    DEEP_TOP_K,
     EMBED_MODEL,
     FINAL_TOP_K,
     LLM_MODEL_FAST,
     LLM_MODEL_QUALITY,
     RERANK_MODEL,
+    RERANK_MIN_LIMIT_MB,
+    RERANK_MODE,
+    RERANK_ONNX_FILE,
     VECTORSTORE_DIR,
 )
 from embeddings import build_embeddings, clear_chroma_client_cache  # noqa: E402
+from memory import container_memory_limit_mb, inside_container  # noqa: E402
+from onnx_models import (  # noqa: E402
+    OnnxCrossEncoder,
+    OnnxLateInteraction,
+    preferred_onnx_file,
+)
 
 # Load demo1's own .env, wherever the process was started from.
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -39,10 +49,19 @@ GROQ_MODEL_QUALITY = LLM_MODEL_QUALITY
 
 _vs_cache = {}
 _reranker = None
+_late_reranker = None
+_strategy = None
 _model_check_done = False
 
 # Below this many routed candidates we fall back to searching everything.
 MIN_ROUTED_CANDIDATES = 3
+
+# How much of the fused list late interaction rewrites. MaxSim needs every
+# candidate's token vectors, so the pool is what the rerank costs in memory and
+# time; the tail keeps its fusion order. Relevant passages are effectively
+# always inside the first forty of the fused list (page hit-rate is 83% at 12),
+# so the ceiling costs almost nothing in quality and bounds the work.
+LATE_RERANK_POOL = 40
 
 
 def _content_to_text(content):
@@ -100,13 +119,71 @@ def corpus_families():
     return {meta.get("doc_family") for meta in metas if meta.get("doc_family")}
 
 
+def corpus_sources():
+    """Source files actually in the index, for a sidebar that cannot lie.
+
+    The deployed app falls back to the bundled sample corpus when the real PDFs
+    are absent (they are copyrighted and never committed), so listing the
+    configured document pack would advertise five IOGP/JIP33 reports while
+    holding two sample files. Read the index instead.
+    """
+    vectorstore = load_vectorstore()
+    metas = vectorstore.get(include=["metadatas"]).get("metadatas") or []
+    return sorted({meta.get("source_file") for meta in metas if meta.get("source_file")})
+
+
 def get_reranker():
     """Load the cross-encoder once per process, not once per question."""
     global _reranker
     if _reranker is None:
-        from sentence_transformers import CrossEncoder
-        _reranker = CrossEncoder(RERANK_MODEL)
+        _reranker = OnnxCrossEncoder(
+            RERANK_MODEL,
+            filename=RERANK_ONNX_FILE or preferred_onnx_file(RERANK_MODEL),
+        )
     return _reranker
+
+
+def get_late_reranker():
+    """Rerank with the embedding model already resident, at no extra cost."""
+    global _late_reranker
+    if _late_reranker is None:
+        _late_reranker = OnnxLateInteraction(build_embeddings())
+    return _late_reranker
+
+
+def rerank_strategy():
+    """Which reranker this host gets, and why.
+
+    The cross-encoder ranks better — measured page MRR 0.618 against 0.531 for
+    late interaction — but it is a second set of weights, ~310 MB resident, and
+    Streamlit Community Cloud may hand the app as little as 690 MB in total.
+    Late interaction scores with token vectors the loaded embedder already
+    produces, so it is free; the caller deepens the context to DEEP_TOP_K to
+    compensate for its looser ordering.
+
+    `DEMO1_RERANK=on|off` pins the choice; `auto`, the default, reads the
+    container's own memory ceiling.
+    """
+    global _strategy
+    if _strategy is None:
+        limit = container_memory_limit_mb()
+        if RERANK_MODE in ("on", "off"):
+            _strategy = "cross-encoder" if RERANK_MODE == "on" else "late-interaction"
+        elif limit is None:
+            # No declared ceiling. That is a laptop, unless we are plainly in a
+            # container — where the ceiling is enforced from outside and cannot
+            # be read, so assume it is tight rather than gamble on it.
+            _strategy = (
+                "late-interaction" if inside_container() else "cross-encoder"
+            )
+        else:
+            _strategy = (
+                "late-interaction"
+                if limit < RERANK_MIN_LIMIT_MB
+                else "cross-encoder"
+            )
+        print(f"  rerank: {_strategy} (container memory limit: {limit} MB)")
+    return _strategy
 
 
 def _chunk_key(meta, text):
@@ -209,10 +286,22 @@ def search_chunks(vectorstore, question, limit=None):
     if not candidates:
         return []
 
-    reranker = get_reranker()
-    scores = reranker.predict([[question, c.page_content] for c in candidates])
-    ranked = sorted(zip(scores, candidates), key=lambda pair: pair[0], reverse=True)
-    return [chunk for _, chunk in ranked[: limit or FINAL_TOP_K]]
+    if rerank_strategy() == "cross-encoder":
+        scores = get_reranker().predict(
+            [[question, c.page_content] for c in candidates]
+        )
+        ranked = sorted(zip(scores, candidates), key=lambda pair: pair[0], reverse=True)
+        return [chunk for _, chunk in ranked[: limit or FINAL_TOP_K]]
+
+    # Late interaction orders the close calls against the question's own token
+    # vectors. It is less precise than the cross-encoder, so the cut is deeper:
+    # the same evidence reaches the model in 89% of golden questions at 20
+    # chunks, against 83% at 12.
+    pool = candidates[:LATE_RERANK_POOL]
+    scores = get_late_reranker().predict([[question, c.page_content] for c in pool])
+    ranked = sorted(zip(scores, pool), key=lambda pair: pair[0], reverse=True)
+    ordered = [chunk for _, chunk in ranked] + candidates[LATE_RERANK_POOL:]
+    return ordered[: limit or DEEP_TOP_K]
 
 
 NOT_FOUND = "This information is not found in the loaded documents."

@@ -112,8 +112,9 @@ The root `requirements.txt` exists only as a deployment shim — Streamlit Cloud
 looks for it at the repository root, while each demo keeps its own dependencies
 inside its own folder.
 
-The first load takes a minute or two: it downloads the embedding model (~470 MB)
-and builds the index, both cached for the life of the container.
+The first load takes a minute or two: it downloads the int8 ONNX models
+(~120 MB for the embedder, ~120 MB more for the cross-encoder) and builds the
+index, all cached for the life of the container.
 
 **Not Netlify.** Streamlit needs a long-running Python process and a WebSocket
 per user; Netlify serves static files and short-lived functions. Netlify is the
@@ -123,4 +124,5 @@ right home for a portfolio landing page that links to the demo.
 
 ## Stack
 
-LangChain · ChromaDB · Groq LLaMA 3.3 70B · sentence-transformers · pdfplumber · Streamlit · N8N
+LangChain · ChromaDB · Groq (gpt-oss-120b) · ONNX Runtime (int8 embeddings and
+reranking) · pdfplumber · Streamlit · N8N

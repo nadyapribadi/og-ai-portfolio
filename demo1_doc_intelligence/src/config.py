@@ -182,6 +182,15 @@ LLM_FALLBACK_MODELS = [
 # ─────────────────────────────────────────────
 # Embeddings + chunking
 # ─────────────────────────────────────────────
+# Both models run on ONNX Runtime, not torch. The hosted app gets 690 MB–2.7 GB
+# and throttles on overshoot; torch + sentence-transformers + two fp32 models
+# measured ~1.35 GB resident, which is what produced "this app has gone over its
+# resource limits". These repos are int8 ONNX ports of the same weights — see
+# onnx_models.py for the measurements behind the choice.
+#
+# `*_ONNX_FILE` selects the precision. model_quantized.onnx is int8 (smallest,
+# what deployment uses); model.onnx is fp32 (largest, for a local parity check).
+
 # The chunk budget MUST stay under the embedding model's window. If it does
 # not, the tail of every chunk is silently dropped at embedding time and never
 # becomes searchable — that was the original defect: 3,500-character chunks
@@ -192,12 +201,14 @@ LLM_FALLBACK_MODELS = [
 # Bahasa path outright. Override with DEMO1_EMBED_MODEL=... to re-run the
 # comparison without editing code.
 EMBED_MODEL = os.getenv(
-    "DEMO1_EMBED_MODEL", "intfloat/multilingual-e5-small"
+    "DEMO1_EMBED_MODEL", "Xenova/multilingual-e5-small"
 )
+EMBED_ONNX_FILE = os.getenv("DEMO1_EMBED_ONNX_FILE", "onnx/model_quantized.onnx")
 
 # Models that expect task prefixes. E5-family models are trained this way and
 # lose accuracy without them; everything else embeds raw text.
 EMBED_PROMPTS = {
+    "Xenova/multilingual-e5-small": {"query": "query: ", "passage": "passage: "},
     "intfloat/multilingual-e5-small": {"query": "query: ", "passage": "passage: "},
     "intfloat/multilingual-e5-base": {"query": "query: ", "passage": "passage: "},
 }
@@ -207,17 +218,44 @@ EMBED_PROMPTS = {
 # tokenizer at ingest time — never hardcoded.
 CHUNK_WINDOW_FRACTION = 0.85
 
-# Cross-encoder used to rerank candidates. The multilingual mMARCO model trades
-# a little English accuracy for a lot of Bahasa — 83%/67% versus 92%/33% — and
-# lifts overall page MRR from 0.529 to 0.624.
+# Cross-encoder used to rerank candidates. Reranking earns its place: measured
+# on the final stack, fusion order alone gives page MRR 0.468, late interaction
+# 0.531, and this cross-encoder 0.618. An English-only cross-encoder managed
+# 0.485 — the multilingual model is what carries the Bahasa half of the golden
+# set. It ships its own int8 ONNX exports; onnx_models picks the CPU variant.
 RERANK_MODEL = os.getenv(
     "DEMO1_RERANK_MODEL", "cross-encoder/mmarco-mMiniLMv2-L12-H384-v1"
 )
+# Empty means "pick the variant that matches this CPU".
+RERANK_ONNX_FILE = os.getenv("DEMO1_RERANK_ONNX_FILE", "")
+
+# The cross-encoder is the better ranker and a second set of weights: ~310 MB
+# resident, measured, on a host that may hand the app only 690 MB total. So the
+# strategy is a decision, not a constant:
+#
+#   auto (default)     cross-encoder when the container reports enough memory,
+#                      late interaction on the embedding model already loaded
+#                      when it does not
+#   on / off           pin it, e.g. to reproduce either measurement
+#
+# Measured on the 18-question golden set: cross-encoder page MRR 0.618 and the
+# right page in the context 100% of the time at k=20; late interaction 0.531
+# and 89%. Late interaction costs nothing extra, which is the whole point.
+RERANK_MODE = os.getenv("DEMO1_RERANK", "auto").strip().lower()
+
+# Below this container ceiling, the second model is not affordable: 145 MB base
+# + 440 MB embedder + 310 MB reranker leaves too little room inside 690 MB.
+RERANK_MIN_LIMIT_MB = int(os.getenv("DEMO1_RERANK_MIN_LIMIT_MB") or 1400)
 
 # How many chunks to hand the answering model. Chunks are now clause-sized
 # (~200 tokens) rather than page-sized, so retrieval depth — not a fixed count —
 # is what keeps the context budget comparable to before.
 FINAL_TOP_K         = 12
+
+# Depth used when the cross-encoder is not available. Without it the fused order
+# is less precise, so the answering model gets more excerpts to choose from:
+# measured page hit-rate 89% at 20 chunks versus 83% at 12.
+DEEP_TOP_K          = 20
 
 # Candidates each retriever contributes before fusion and reranking.
 CANDIDATE_K         = 50

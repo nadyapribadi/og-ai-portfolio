@@ -2,37 +2,47 @@
 
 Both ingest and retrieval go through here so the two can never drift apart —
 the chunk size is derived from the same window the embedder actually honours.
-"""
-from langchain_huggingface import HuggingFaceEmbeddings
 
-from config import EMBED_MODEL, EMBED_PROMPTS
+The model executes on ONNX Runtime, not torch. The hosted app has between
+690 MB and 2.7 GB of memory and throttles on overshoot; torch plus two fp32
+transformers measured ~1.35 GB resident. See onnx_models.py for the numbers and
+the reasoning.
+"""
+from config import EMBED_MODEL, EMBED_ONNX_FILE, EMBED_PROMPTS
+from onnx_models import OnnxEmbeddings, build_tokenizer, model_max_length
+
+# One embedder per (repo, file) for the whole process. Chroma is opened twice on
+# a cold start — once by the index build, once by retrieval — and a second
+# session of the same weights is a second 440 MB, measured, for no benefit.
+_embedders = {}
 
 
 def build_embeddings(model_name=None):
     name = model_name or EMBED_MODEL
-    kwargs = {"model_name": name}
-    prompts = EMBED_PROMPTS.get(name)
-    if prompts:
-        kwargs["model_kwargs"] = {"prompts": prompts}
-        kwargs["encode_kwargs"] = {
-            "normalize_embeddings": True,
-            "prompt_name": "passage",
-        }
-        kwargs["query_encode_kwargs"] = {
-            "normalize_embeddings": True,
-            "prompt_name": "query",
-        }
-    return HuggingFaceEmbeddings(**kwargs)
+    key = (name, EMBED_ONNX_FILE)
+    if key not in _embedders:
+        _embedders[key] = OnnxEmbeddings(
+            name,
+            filename=EMBED_ONNX_FILE,
+            prompts=EMBED_PROMPTS.get(name),
+            max_length=embedding_window(name),
+        )
+    return _embedders[key]
 
 
 def embedding_window(model_name=None):
     """Token window the model actually honours, with safety caps."""
-    from transformers import AutoTokenizer
+    return model_max_length(model_name or EMBED_MODEL)
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name or EMBED_MODEL)
-    window = getattr(tokenizer, "model_max_length", None) or 512
-    # Tokenizers use a huge sentinel when the window is unknown.
-    return window if 0 < window <= 8192 else 512
+
+def token_counter(model_name=None):
+    """Count tokens the way the embedder will, for chunk-size decisions."""
+    tokenizer = build_tokenizer(model_name or EMBED_MODEL)
+
+    def count(text):
+        return len(tokenizer.encode(text, add_special_tokens=False).ids)
+
+    return count
 
 
 def clear_chroma_client_cache():

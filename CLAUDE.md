@@ -44,15 +44,16 @@ PDF or markdown → pdfplumber (text + table markdown), or raw text
                 → strip running headers, drop the table of contents
                 → Document → Section → Clause  (parse.py)
                 → one chunk per clause, never crossing a page break
-                → local embeddings (intfloat/multilingual-e5-small, 512-token
+                → local embeddings (multilingual-e5-small, int8 ONNX, 512-token
                   window; the chunk budget is derived from that window)
                 → ChromaDB
 
 Query time:
 Question → route by document family / role (e.g. S-737 TRS)
          → BM25 ∥ vector search → reciprocal rank fusion
-         → local cross-encoder rerank (mmarco-mMiniLMv2, cached per process)
-         → top 12 chunks → LLM returns a claims schema
+         → rerank: mmarco cross-encoder when the host's memory allows it,
+           otherwise late interaction on the embedder already loaded
+         → top 12 (20 without the cross-encoder) chunks → LLM claims schema
          → every claim validated against the excerpts it cites
          → Streamlit UI
 ```
@@ -60,8 +61,19 @@ Question → route by document family / role (e.g. S-737 TRS)
 ### Key decisions
 
 **Everything retrieves locally and free.** Embeddings, BM25 and the reranker all
-run on CPU. The only paid-ish call is the final answer, and on the Groq free
-tier that is enough for a demo.
+run on CPU, on ONNX Runtime and not torch. The only paid-ish call is the final
+answer, and on the Groq free tier that is enough for a demo.
+
+**Memory is a design constraint, not an afterthought.** Streamlit Community
+Cloud gives an app 690 MB–2.7 GB and throttles it on overshoot. The torch stack
+measured 1.35 GB resident (torch 236 MB on import, sentence-transformers 199 MB,
+two fp32 models 915 MB), which is what served "this app has gone over its
+resource limits" instead of answers. The same two models as int8 ONNX graphs are
+118 MB + 119 MB on disk, need no framework, and measured 0.618 page MRR against
+0.590 for torch. The second model is still ~310 MB resident, so the reranker is
+chosen from the container's own cgroup ceiling: cross-encoder above 1.4 GB,
+late interaction (free — it reuses the embedder's token vectors) below. Numbers
+and reasoning live in `onnx_models.py`, `memory.py` and `config.py`.
 
 **Chunk size is derived, not chosen.** The chunk budget is computed from the
 embedding model's own token window at ingest time. The original bug was 3,500-
@@ -112,9 +124,16 @@ one LLM call per question for no measurable gain.
 | + multilingual embeddings + mMARCO rerank | 100% | 78% |
 | + hybrid BM25/RRF + document routing | 100% | 89% |
 | + plural normalisation + inherited clause titles | **100%** | **94%** |
+| ONNX int8 (same models, torch removed) | **100%** | **94%** |
 
 English 100%, Bahasa Indonesia 83% (was 0%). 17 of 18 questions land in the
-top 12, 15 in the top 6.
+top 12, 15 in the top 6. Page MRR 0.618 for the ONNX stack against 0.590 for
+torch fp32 — the swap is a memory win, not a quality concession.
+
+When the container's ceiling is too low for the second model, the pipeline falls
+back to late interaction with a deeper cut. Measured on the same golden set:
+right document 100%, right page 89% (at 20 chunks), page MRR 0.531. That is the
+degraded mode, and it is the one a 690 MB container gets.
 
 Honest caveat: the last step is not purely a retrieval gain. The parser fixes
 (a bare "8.1.2" now inherits its parent's title, and BM25 matches singular and

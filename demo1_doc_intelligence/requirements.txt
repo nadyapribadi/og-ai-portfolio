@@ -12,13 +12,19 @@ streamlit==1.58.0
 python-dotenv==1.2.2
 
 # ── Retrieval ────────────────────────────────────────────────────────────────
-langchain-core==1.4.0
+langchain-core==1.4.0        # the Embeddings interface the ONNX wrapper implements
 langchain-chroma==1.1.0
 chromadb==1.5.9              # queried directly for collection metadata
-langchain-huggingface==1.2.2
-sentence-transformers==5.5.1
-transformers==5.9.0          # tokenizer + the embedding window at ingest time
-torch==2.12.0                # CPU build; swap for a CUDA build if you have a GPU
+onnxruntime==1.30.0          # runs the embedding and reranking graphs on CPU
+tokenizers==0.22.2           # tokenizer.json -> ids, without pulling in torch
+huggingface_hub==1.32.0      # downloads the model files once per container
+numpy==2.4.6
+
+# Torch is deliberately absent. It cost 236 MB on import and the two fp32
+# transformer models it loaded cost another 915 MB resident, against a hosted
+# budget that starts at 690 MB — that combination is what produced "this app has
+# gone over its resource limits". The same weights as int8 ONNX graphs are
+# 118 MB + 119 MB on disk and need no framework. See onnx_models.py.
 
 # ── Ingestion ────────────────────────────────────────────────────────────────
 pdfplumber==0.11.9

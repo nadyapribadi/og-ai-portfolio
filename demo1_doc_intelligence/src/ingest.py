@@ -16,8 +16,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
-from langchain_huggingface import HuggingFaceEmbeddings
-from transformers import AutoTokenizer
 
 sys.path.insert(0, str(Path(__file__).parent))
 import parse  # noqa: E402
@@ -34,6 +32,7 @@ from embeddings import (  # noqa: E402
     build_embeddings,
     clear_chroma_client_cache,
     embedding_window,
+    token_counter,
 )
 
 # Load demo1's own .env, wherever the process was started from.
@@ -202,10 +201,7 @@ def build_index():
     print(f"  model:  {EMBED_MODEL}")
     print(f"  window: {window} tokens → chunk target {target_tokens}")
 
-    tokenizer = AutoTokenizer.from_pretrained(EMBED_MODEL)
-
-    def count_tokens(text):
-        return len(tokenizer.encode(text, add_special_tokens=False))
+    count_tokens = token_counter()
 
     print("\n=== Step 3: clauses → chunks ===")
     clauses, chunks = build_chunks(pages, count_tokens, target_tokens)

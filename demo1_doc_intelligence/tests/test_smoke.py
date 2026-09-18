@@ -97,3 +97,73 @@ def test_live_answer_is_cited():
     result = retrieval.ask("What are the life saving rules?")
     assert result["answer"].strip()
     assert result["sources"]
+
+
+def test_container_limit_is_read_from_cgroup_files(tmp_path, monkeypatch):
+    """The rerank decision depends on this reading being right."""
+    import memory
+
+    limit_file = tmp_path / "memory.max"
+    monkeypatch.setattr(memory, "LIMIT_FILES", (limit_file,))
+
+    limit_file.write_text("max\n")
+    assert memory.container_memory_limit_mb() is None, "cgroup v2 spells it 'max'"
+
+    limit_file.write_text("724828160\n")
+    assert memory.container_memory_limit_mb() == 691
+
+    limit_file.write_text("9223372036854771712\n")
+    assert memory.container_memory_limit_mb() is None, "cgroup v1 sentinel is not a limit"
+
+    limit_file.write_text("not a number\n")
+    assert memory.container_memory_limit_mb() is None
+
+    limit_file.unlink()
+    assert memory.container_memory_limit_mb() is None
+
+
+def test_rerank_strategy_follows_the_container_ceiling(monkeypatch):
+    """A 690 MB container must not load a second ~310 MB model.
+
+    Loading it anyway is the failure this whole change exists to prevent:
+    Streamlit Community Cloud serves "over its resource limits" instead of
+    answers once the app goes past its allocation.
+    """
+    import retrieval
+
+    def strategy_for(limit, container=False):
+        monkeypatch.setattr(retrieval, "_strategy", None)
+        monkeypatch.setattr(
+            retrieval, "container_memory_limit_mb", lambda: limit
+        )
+        monkeypatch.setattr(
+            retrieval, "inside_container", lambda: container
+        )
+        return retrieval.rerank_strategy()
+
+    assert strategy_for(690) == "late-interaction"
+    assert strategy_for(1400) == "cross-encoder"
+    assert strategy_for(2700) == "cross-encoder"
+    assert strategy_for(None) == "cross-encoder", "no ceiling means a laptop"
+    assert strategy_for(None, container=True) == "late-interaction", (
+        "an unreadable ceiling inside a container is not evidence of room"
+    )
+    monkeypatch.setattr(retrieval, "_strategy", None)
+
+
+def test_the_deployed_path_never_imports_torch():
+    """Torch is still installed (the bake-off scripts use it), so a stray import
+    would be silent — and would put 236 MB back on the hosted budget."""
+    import subprocess
+    import sys as _sys
+
+    script = (
+        f"import sys; sys.path.insert(0, {str(SRC)!r});"
+        "import retrieval, embeddings, onnx_models;"
+        "print(sorted(m for m in ('torch', 'sentence_transformers', 'transformers')"
+        " if m in sys.modules))"
+    )
+    result = subprocess.run(
+        [_sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+    assert result.stdout.strip() == "[]", result.stdout

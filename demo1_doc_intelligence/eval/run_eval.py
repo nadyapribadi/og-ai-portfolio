@@ -7,8 +7,10 @@ whether a bad answer came from bad retrieval or from bad generation.
 Usage (from the repo root):
 
     python demo1_doc_intelligence/eval/run_eval.py
-    python demo1_doc_intelligence/eval/run_eval.py --no-expand
     python demo1_doc_intelligence/eval/run_eval.py --json /tmp/eval.json
+
+The reranker is chosen by the container's memory ceiling (see retrieval.py);
+`DEMO1_RERANK=on|off` pins it, so both measured paths can be compared.
 """
 from __future__ import annotations
 
@@ -31,11 +33,9 @@ def load_golden():
     return yaml.safe_load(GOLDEN.read_text())["questions"]
 
 
-def evaluate(questions, expand=True):
+def evaluate(questions):
     """Return one result row per question, with document- and page-level hits."""
     vectorstore = retrieval.load_vectorstore("en")
-    if not expand:
-        retrieval.expand_query = lambda q: [q]
 
     rows = []
     for item in questions:
@@ -87,11 +87,6 @@ def evaluate(questions, expand=True):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--no-expand",
-        action="store_true",
-        help="skip LLM query expansion (cheaper, deterministic)",
-    )
     parser.add_argument("--json", help="write raw per-question results here")
     parser.add_argument(
         "--answers",
@@ -104,7 +99,7 @@ def main():
     args = parser.parse_args()
 
     questions = load_golden()
-    rows = evaluate(questions, expand=not args.no_expand)
+    rows = evaluate(questions)
     n = len(rows)
 
     def rate(key, top=None):
@@ -128,6 +123,7 @@ def main():
         return hits / len(rows)
 
     print(f"questions              {n}")
+    print(f"reranker               {retrieval.rerank_strategy()}")
     print(f"doc  hit-rate@6        {rate('doc', 6):.0%}")
     print(f"page hit-rate@6        {rate('page', 6):.0%}")
     print(f"doc  hit-rate@k        {rate('doc'):.0%}")
