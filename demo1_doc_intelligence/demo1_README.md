@@ -41,6 +41,8 @@ rather than the page that lists the rules. Everything else lands.
 | `retrieval.py` | route → BM25 + vector → RRF → rerank |
 | `onnx_models.py` | the embedding and reranking models, on ONNX Runtime |
 | `memory.py` | what the container will let the process load |
+| `app.css` | the interface layer: metrics and one motif, no colours of its own |
+| `DESIGN.md` | the interface direction the layer implements |
 | `answer.py` | schema-constrained answers with verified citations |
 | `llm.py` | provider-agnostic chat models with a fallback chain |
 | `app.py` | Streamlit UI |

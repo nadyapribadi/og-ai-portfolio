@@ -1,0 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+
+/* Metrics, reading rhythm, and one product motif. Every colour comes from the
+   Streamlit theme in .streamlit/config.toml, so the app inherits whichever
+   theme the reader chose (light or dark) and cannot drift out of contrast on
+   its own: currentColor plus color-mix() is the entire palette here.
+
+   No opacity on text either. Hierarchy comes from size and weight, which the
+   contrast test can verify; grey produced by transparency cannot, and light
+   grey on a light surface is the defect this layer was rewritten to remove.
+
+   Rule: no hex colours in this file. tests/test_theme_contrast.py enforces it,
+   and asserts the theme itself meets WCAG AA in both modes. */
+
+/* Reading measure. Long specification clauses are easier to follow at about
+   80 characters than across a 1400px window. */
+.block-container {
+    max-width: 880px;
+    padding: 2rem 1.5rem 4rem;
+}
+
+/* App header */
+.app-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem;
+    padding-bottom: 0.9rem;
+    margin-bottom: 1.6rem;
+    border-bottom: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+}
+.app-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+.app-subtitle {
+    font-size: 0.9375rem;
+    margin-top: 0.3rem;
+}
+.index-badge {
+    font-size: 0.8125rem;
+    text-align: right;
+    line-height: 1.7;
+}
+
+/* Sidebar */
+section[data-testid="stSidebar"] .block-container {
+    padding: 1.25rem 1rem 2rem;
+}
+.brand {
+    font-size: 1rem;
+    font-weight: 600;
+}
+.brand-by {
+    font-size: 0.8125rem;
+    margin-top: 0.15rem;
+}
+.sidebar-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.5rem;
+}
+.doc-item {
+    font-size: 0.875rem;
+    padding: 0.3rem 0;
+}
+.doc-item + .doc-item {
+    border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent);
+}
+.cat-header {
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin: 0.9rem 0 0.35rem;
+}
+
+/* Sample-question buttons keep Streamlit's own colours, hover and focus ring.
+   Only the metrics change, so eight of them read as a list, not eight CTAs. */
+div[data-testid="stButton"] button {
+    text-align: left;
+    font-size: 0.875rem;
+    padding: 0.45rem 0.7rem;
+}
+div[data-testid="stButton"] button p {
+    font-size: 0.875rem;
+}
+
+/* Empty state: an index of what this corpus answers, not four equal cards.
+   The term column carries the weight, the description defers to it. */
+.empty-state {
+    margin-top: 1.5rem;
+}
+.empty-state-title {
+    font-size: 1.0625rem;
+    font-weight: 600;
+    margin-bottom: 0.35rem;
+}
+.empty-state-hint {
+    font-size: 0.875rem;
+    margin-bottom: 1rem;
+}
+.index-row {
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) 1fr;
+    gap: 0.2rem 1.25rem;
+    padding: 0.8rem 0;
+    border-top: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+.index-row:last-child {
+    border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+.index-term {
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+.index-desc {
+    font-size: 0.875rem;
+    line-height: 1.55;
+}
+
+/* The one motif: a claim's evidence is set apart from the claim, because the
+   promise of this app is that every statement can be checked against it. */
+.evidence {
+    border-left: 3px solid color-mix(in srgb, var(--primary-color, currentColor) 55%, transparent);
+    padding: 0.35rem 0 0.35rem 0.85rem;
+    margin: 0.7rem 0;
+}
+.evidence-head {
+    font-size: 0.8125rem;
+    margin-bottom: 0.15rem;
+}
+
+/* Notes and provenance */
+.note {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent);
+    padding-left: 0.75rem;
+    margin-top: 0.5rem;
+}
+.source-tag {
+    display: inline-block;
+    font-size: 0.8125rem;
+    padding: 0.05rem 0.45rem;
+    margin: 0.35rem 0.35rem 0 0;
+    border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+    border-radius: 0.25rem;
+}
+.powered-by {
+    font-size: 0.8125rem;
+    line-height: 1.9;
+}
+.powered-by strong {
+    font-weight: 600;
+}

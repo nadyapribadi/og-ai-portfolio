@@ -94,16 +94,17 @@ def capability_answer():
     documents = ", ".join(SOURCE_FRIENDLY.get(name, name) for name in corpus_sources())
     lines = [
         f"I answer only from the documents indexed here: {documents}.",
-        "In scope: " + "; ".join(card["title"] for card in cards) + ".",
         "",
-        "Questions that work:",
+        "**In scope**",
+        "",
     ]
+    lines += [f"- {card['title']}" for card in cards]
+    lines += ["", "**Questions that work**", ""]
     for category, items in questions.items():
-        lines.append(f"  {category}")
-        lines.extend(f"    • {item}" for item in items)
+        lines.append(f"- {category}: " + "; ".join(items))
     lines += [
         "",
-        "Saya hanya menjawab dari dokumen itu — kalau jawabannya tidak ada di "
+        "Saya hanya menjawab dari dokumen itu. Kalau jawabannya tidak ada di "
         "sana, saya bilang tidak ketemu, bukan mengarang.",
     ]
     return "\n".join(lines)

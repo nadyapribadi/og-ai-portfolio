@@ -61,32 +61,32 @@ APP_SUBTITLE = "Ask questions from IOGP standards · JIP33 specifications · Pro
 # Document sources shown in sidebar
 # Update this list to match your actual PDFs
 DOCUMENT_SOURCES = [
-    "IOGP Report 459 — Life-Saving Rules",
-    "IOGP Report 456 — Process Safety KPIs",
-    "JIP33 S-737 — Deluge Skids (TRS + QRS)",
-    "JIP33 S-717 — Noise Equipment (TRS + QRS)",
-    "JIP33 S-719 — Water Mist Fire Protection",
+    "IOGP Report 459: Life-Saving Rules",
+    "IOGP Report 456: Process Safety KPIs",
+    "JIP33 S-737: Deluge Skids (TRS + QRS)",
+    "JIP33 S-717: Noise Equipment (TRS + QRS)",
+    "JIP33 S-719: Water Mist Fire Protection",
 ]
 
 # Sample questions shown as clickable buttons in sidebar
 # Replace with questions relevant to your own documents
 SAMPLE_QUESTIONS = {
-    "🦺 HSE Rules": [
+    "HSE rules": [
         "What are the life saving rules?",
         "What must I confirm before entering a confined space?",
         "What are the hot work requirements in a hazardous area?",
     ],
-    "📊 Process Safety": [
+    "Process safety": [
         "What is the difference between Tier 1 and Tier 2 process safety events?",
         "How are process safety KPIs measured?",
         "What does LOPC stand for and what are its consequences?",
     ],
-    "⚙️ Equipment Standards": [
+    "Equipment standards": [
         "What does IOGP S-737 specify for deluge skid design?",
         "What standards does S-737 reference for electrical installations?",
         "What does IOGP S-717 cover for noise emitting equipment?",
     ],
-    "🇮🇩 Bahasa Indonesia": [
+    "Bahasa Indonesia": [
         "Apa saja aturan keselamatan jiwa menurut IOGP?",
         "Apa yang harus dilakukan sebelum memasuki ruang tertutup?",
         "Apa perbedaan antara kejadian keselamatan proses Tier 1 dan Tier 2?",
@@ -96,17 +96,17 @@ SAMPLE_QUESTIONS = {
 # Shown instead when the index was built from the bundled sample corpus, so the
 # first thing a new user clicks actually works.
 SAMPLE_QUESTIONS_SAMPLE = {
-    "📐 Technical requirements": [
+    "Technical requirements": [
         "What is the minimum design pressure for the deluge skid?",
         "What ingress protection rating is required for electrical enclosures?",
         "What surface preparation standard applies to steel structures?",
     ],
-    "✅ Quality requirements": [
+    "Quality requirements": [
         "What pressure test is required and for how long?",
         "What documents must the manufacturing record book contain?",
         "When must conformity assessment be completed?",
     ],
-    "🇮🇩 Bahasa Indonesia": [
+    "Bahasa Indonesia": [
         "Berapa tekanan desain minimum untuk deluge skid?",
         "Berapa lama pengujian tekanan hidrostatik berlangsung?",
     ],
@@ -116,30 +116,30 @@ SAMPLE_QUESTIONS_SAMPLE = {
 # Replace with descriptions relevant to your own documents
 CAPABILITY_CARDS = [
     {
-        "title": "🦺 HSE & Safety Rules",
+        "title": "HSE and safety rules",
         "desc": (
             "Ask about IOGP Life-Saving Rules, confined space entry, "
             "hot work requirements, energy isolation, working at height."
         ),
     },
     {
-        "title": "📊 Process Safety KPIs",
+        "title": "Process safety KPIs",
         "desc": (
             "Tier 1 and Tier 2 process safety events, LOPC definitions, "
             "consequence thresholds, KPI measurement frameworks."
         ),
     },
     {
-        "title": "⚙️ Equipment Specifications",
+        "title": "Equipment specifications",
         "desc": (
             "JIP33 S-737 deluge skids, S-717 noise equipment, "
-            "S-719 water mist fire protection — technical and quality requirements."
+            "S-719 water mist fire protection: technical and quality requirements."
         ),
     },
     {
-        "title": "🇮🇩 Bahasa Indonesia",
+        "title": "Bahasa Indonesia",
         "desc": (
-            "Tanya langsung dalam Bahasa Indonesia — pencarian dan jawaban "
+            "Tanya langsung dalam Bahasa Indonesia: pencarian dan jawaban "
             "ditangani dalam bahasa yang sama, tanpa terjemahan."
         ),
     },
@@ -152,31 +152,31 @@ CAPABILITY_CARDS = [
 # click. Cards follow the corpus, exactly like the sample questions do.
 CAPABILITY_CARDS_SAMPLE = [
     {
-        "title": "📐 Design requirements",
+        "title": "Design requirements",
         "desc": (
             "Minimum design pressure, ingress protection rating, cable support "
-            "and tag plates — the technical requirements of the bundled S-900 "
+            "and tag plates: the technical requirements of the bundled S-900 "
             "deluge skid specification."
         ),
     },
     {
-        "title": "✅ Inspection & testing",
+        "title": "Inspection and testing",
         "desc": (
             "Hydrostatic pressure testing and its duration, the test medium, "
             "inspection points, material and welding certification."
         ),
     },
     {
-        "title": "📄 Documentation & conformity",
+        "title": "Documentation and conformity",
         "desc": (
             "Manufacturing record book contents, language of documentation, "
             "conformity assessment, concession requests."
         ),
     },
     {
-        "title": "🇮🇩 Bahasa Indonesia",
+        "title": "Bahasa Indonesia",
         "desc": (
-            "Tanya langsung dalam Bahasa Indonesia — pencarian dan jawaban "
+            "Tanya langsung dalam Bahasa Indonesia: pencarian dan jawaban "
             "ditangani dalam bahasa yang sama, tanpa terjemahan."
         ),
     },

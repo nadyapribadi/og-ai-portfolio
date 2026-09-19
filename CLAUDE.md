@@ -110,6 +110,16 @@ of two synthetic deluge-skid files is a promise one click disproves. CI builds
 the sample corpus and asserts every question the sidebar offers there retrieves
 its own answer, so the promise is a test rather than a hope.
 
+**The interface is a reading surface, and it is measured.**
+`demo1_doc_intelligence/DESIGN.md`
+holds the direction (warm paper, ink, one amber accent, IBM Plex, ENERGY 1 /
+RHYTHM 1 / MOTION 1). Colour lives only in `.streamlit/config.toml`, split into
+`[theme.light]` and `[theme.dark]` so a mode switch really switches; `app.css`
+is forbidden from owning a colour and inherits the theme instead, which is what
+keeps the reader's choice working. `test_theme_contrast.py` asserts both
+palettes (4.5:1 text, 3:1 boundaries) and that the CSS stays colourless, so an
+audit finding cannot come back quietly.
+
 **Providers are config, not code.** `llm.py` builds chat models from
 `LLM_PROVIDER`, validates model ids at startup (Groq retires models, which is
 how this app died) and falls back to the next model on a rate limit or a

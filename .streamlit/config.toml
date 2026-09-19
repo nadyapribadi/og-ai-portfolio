@@ -16,3 +16,62 @@ gatherUsageStats = false
 [client]
 # Show full tracebacks in the browser, not just "Error running app".
 showErrorDetails = "full"
+# Hide the Deploy button and the developer toolbar. This replaces a CSS rule
+# that hid the whole header, which also hid the sidebar toggle: on a narrow
+# screen the document list and the sample questions became unreachable.
+toolbarMode = "minimal"
+
+# ── Theme ────────────────────────────────────────────────────────────────────
+# Light is the default because this is a reading tool: specification clauses,
+# verbatim quotes, page references. Dark is the same layout with the dark
+# palette, picked in the app menu.
+#
+# Structure matters here: colours live in the mode tables, so switching mode
+# actually switches the palette. Values set directly in [theme] would apply to
+# both modes and silently override the dark table.
+#
+# Every value was measured with the antislop-human contrast checker rather than
+# picked by eye, and tests/test_theme_contrast.py asserts both palettes before
+# either can ship: 4.5:1 for text, 3:1 for boundaries, focus indicators and
+# icons. One accent (amber) marks actions and focus; the link colour is the
+# same hue instead of a second chromatic voice.
+#
+# Streamlit 1.58 knows `font`, `headingFont` and `codeFont`; `bodyFont` from
+# older documentation is rejected as an unknown option.
+[theme]
+base = "light"
+baseRadius = "small"
+showWidgetBorder = true
+font = "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif"
+headingFont = "'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif"
+codeFont = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace"
+
+[theme.light]
+primaryColor = "#8a5312"
+backgroundColor = "#fbfaf7"
+secondaryBackgroundColor = "#f1eee7"
+textColor = "#1b1f24"
+linkColor = "#8a5312"
+borderColor = "#8f887a"
+redColor = "#a3281f"
+orangeColor = "#8a5312"
+greenColor = "#1c6b3c"
+
+[theme.light.sidebar]
+backgroundColor = "#f1eee7"
+borderColor = "#8f887a"
+
+[theme.dark]
+primaryColor = "#a9741f"
+backgroundColor = "#14171c"
+secondaryBackgroundColor = "#1b1f26"
+textColor = "#e9eef5"
+linkColor = "#e0a93f"
+borderColor = "#6b7787"
+redColor = "#ff8a80"
+orangeColor = "#e0a93f"
+greenColor = "#5fbf85"
+
+[theme.dark.sidebar]
+backgroundColor = "#1b1f26"
+borderColor = "#6b7787"
