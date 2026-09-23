@@ -12,6 +12,11 @@ pytest:
     DEMO1_VECTORSTORE=/tmp/vs python demo1_doc_intelligence/src/ingest.py
     DEMO1_VECTORSTORE=/tmp/vs python -m pytest demo1_doc_intelligence/tests -q
 
+Both variables matter. DEMO1_VECTORSTORE says where the index lives; the
+documents come from DEMO1_DOCS_DIR. Without the second one the app indexes
+data/raw_docs/ when it exists, and these tests would quietly run against the
+real corpus instead. The fixture below refuses to do that.
+
 Each row is a sidebar question and the sentence that answers it. The check is
 two-fold, and both halves are the parts that failed in production: the sentence
 has to be in a retrieved excerpt, and a claim citing the clause that sentence
@@ -38,6 +43,27 @@ import retrieval  # noqa: E402
 
 TRS = "S-900v2026-01 TRS.md"
 QRS = "S-900Qv2026-01 QRS.md"
+SAMPLE_FILES = {TRS, QRS}
+
+
+@pytest.fixture(scope="module")
+def sample_store():
+    """The sample index, or a skip that says how to build one.
+
+    /tmp is purged between sessions, so a missing index is normal rather than a
+    failure. A *wrong* corpus is the dangerous case: it must never look like a
+    pass, and it must not look like a broken app either.
+    """
+    store = retrieval.load_vectorstore("en")
+    indexed = set(retrieval.corpus_sources())
+    if indexed != SAMPLE_FILES:
+        pytest.skip(
+            f"the index at {config.VECTORSTORE_DIR} holds {sorted(indexed)}, not "
+            "the bundled sample corpus. Build one with: DEMO1_DOCS_DIR="
+            "demo1_doc_intelligence/sample_docs DEMO1_VECTORSTORE=<path> python "
+            "demo1_doc_intelligence/src/ingest.py"
+        )
+    return store
 
 CASES = [
     ("What is the minimum design pressure for the deluge skid?", TRS, 4, "4.2.1",
@@ -71,7 +97,7 @@ def test_every_offered_question_is_answerable():
     )
 
 
-def test_what_can_i_ask_is_answered_without_the_model():
+def test_what_can_i_ask_is_answered_without_the_model(sample_store):
     """No excerpt answers a question about the app, so the model said "not found".
 
     It is answered from configuration instead — which also means this test needs
@@ -85,8 +111,10 @@ def test_what_can_i_ask_is_answered_without_the_model():
 
 
 @pytest.mark.parametrize("question,source,page,clause,quote", CASES)
-def test_question_retrieves_its_own_answer(question, source, page, clause, quote):
-    chunks = retrieval.search_chunks(retrieval.load_vectorstore("en"), question)
+def test_question_retrieves_its_own_answer(
+    sample_store, question, source, page, clause, quote
+):
+    chunks = retrieval.search_chunks(sample_store, question)
     assert chunks, "no excerpts retrieved at all"
 
     # "Supported by", not "contains as a substring": each chunk opens with a

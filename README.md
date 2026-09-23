@@ -25,8 +25,10 @@ Ask a question about a technical specification and get an answer that cites the
 document and page it came from. English and Bahasa Indonesia both work.
 
 **Live demo:** https://demo1-doc-intelligence.streamlit.app/
-(Streamlit asks visitors to sign in until the app is switched to public
-sharing. Remove this note once it is.)
+
+The free host sleeps the demo when nobody has used it for a while, so the first
+visit may ask you to wake it up. After that it takes about a minute to load the
+models and build its index.
 
 **Technical notes:** [demo1_README.md](demo1_doc_intelligence/demo1_README.md)
 
@@ -48,6 +50,11 @@ sharing. Remove this note once it is.)
   the budget it reranks with late interaction on the embedder it already has.
   That took the deployed app from 1.35 GB resident, which Streamlit Community
   Cloud refused, to about 580 MB.
+- **Rations its own quota.** The public demo answers with a free API key, so it
+  allows 8 questions per visit, 25 answers a day overall, and a few seconds
+  between questions. Questions it can answer from configuration cost nothing.
+  All three limits are environment variables, and `DEMO1_QUOTA_GUARD=off` lifts
+  them for local work.
 
 ### Evidence
 
@@ -141,6 +148,15 @@ the corpus the hosted demo answers from: every question the sidebar offers is
 asserted to retrieve its own answer. That run executes 60 tests; the
 sample-corpus tests skip themselves when no sample index is present.
 
+To reproduce that locally, set both variables. `DEMO1_VECTORSTORE` says where
+the index lives, and `DEMO1_DOCS_DIR` says which documents go in it:
+
+```bash
+DEMO1_DOCS_DIR=demo1_doc_intelligence/sample_docs \
+DEMO1_VECTORSTORE=/tmp/vs python demo1_doc_intelligence/src/ingest.py
+DEMO1_VECTORSTORE=/tmp/vs python -m pytest demo1_doc_intelligence/tests -q
+```
+
 ---
 
 ## Deploy Demo 1
@@ -192,4 +208,4 @@ here. The bundled sample corpus is synthetic and was written for this project.
 ## Stack
 
 Streamlit · LangChain · ChromaDB · ONNX Runtime (int8 embeddings and reranking)
-· Groq (gpt-oss-120b) · pdfplumber · GitHub Actions
+· Groq (gpt-oss-20b) · pdfplumber · GitHub Actions

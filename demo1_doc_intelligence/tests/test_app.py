@@ -101,3 +101,48 @@ def test_config_copy_is_clean_for_the_corpus_that_is_not_rendered_here():
     for text in strings:
         assert "\u2014" not in text, f"em dash in {text!r}"
         assert not EMOJI.search(text), f"emoji in {text!r}"
+
+
+def test_a_capability_answer_does_not_spend_quota(tmp_path, monkeypatch):
+    """The guard is wired into the answer path, and only for real model calls.
+
+    config and quota are shared module objects, so patching them here reaches
+    the app under test: the app imports the same modules.
+    """
+    import config
+    import quota
+
+    store = tmp_path / "quota.json"
+    monkeypatch.setattr(config, "QUOTA_FILE", store)
+    monkeypatch.setattr(config, "MAX_ANSWERS_PER_DAY", 3)
+    monkeypatch.setattr(config, "QUOTA_GUARD", True)
+
+    app = streamlit_testing.AppTest.from_file(str(APP), default_timeout=300)
+    app.run()
+    app.chat_input[0].set_value("what can you do?").run()
+
+    assert not app.exception, app.exception
+    assert quota.used_today(store) == 0, (
+        "an answer assembled from configuration never reaches the model, so it "
+        "must not count against the daily budget"
+    )
+
+
+def test_a_document_question_spends_quota_before_the_call(tmp_path, monkeypatch):
+    """Quota is spent on attempts, not on successes: a failing key or a hammering
+    script must not look free. No API key is present here, so the model call
+    itself fails, and the counter still moves."""
+    import config
+    import quota
+
+    store = tmp_path / "quota.json"
+    monkeypatch.setattr(config, "QUOTA_FILE", store)
+    monkeypatch.setattr(config, "MAX_ANSWERS_PER_DAY", 3)
+    monkeypatch.setattr(config, "QUOTA_GUARD", True)
+    monkeypatch.setattr(config, "MIN_SECONDS_BETWEEN_ANSWERS", 0.0)
+
+    app = streamlit_testing.AppTest.from_file(str(APP), default_timeout=300)
+    app.run()
+    app.chat_input[0].set_value("What is the minimum design pressure?").run()
+
+    assert quota.used_today(store) == 1

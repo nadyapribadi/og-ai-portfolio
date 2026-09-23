@@ -222,10 +222,18 @@ SOURCE_FRIENDLY = {
 # validate_models() in retrieval.py) so a retired model produces a readable
 # message listing what IS available, instead of a bare 404 mid-question.
 #
-# When a model disappears, update the IDs here — nowhere else.
+# When a model disappears, update the IDs here, nowhere else.
+#
+# The public demo answers with the smaller model on purpose. It runs on a free
+# key that anyone on the internet can spend, and one answer costs roughly 2-4k
+# tokens (12 excerpts plus the prompt and the reply), so the daily budget buys
+# about twice as many answers this way. For local work where answer quality
+# matters more than the daily budget:
+#
+#     DEMO1_ANSWER_MODEL=openai/gpt-oss-120b python demo1_doc_intelligence/src/ingest.py
 LLM_PROVIDER      = "groq"
-LLM_MODEL_FAST    = "openai/gpt-oss-20b"    # query expansion — cheap and quick
-LLM_MODEL_QUALITY = "openai/gpt-oss-120b"   # answering — quality matters
+LLM_MODEL_FAST    = "openai/gpt-oss-20b"
+LLM_MODEL_QUALITY = os.getenv("DEMO1_ANSWER_MODEL", "openai/gpt-oss-20b")
 
 # Tried in order if the primary model is retired, rate-limited or overloaded.
 # This is what stops a provider deprecation from silently killing the app.
@@ -233,6 +241,42 @@ LLM_FALLBACK_MODELS = [
     m for m in os.getenv("DEMO1_FALLBACK_MODELS", "openai/gpt-oss-120b,qwen/qwen3.8-27b").split(",")
     if m.strip()
 ]
+
+# ─────────────────────────────────────────────
+# Cost guard
+# ─────────────────────────────────────────────
+# Cost contract for this call path, written before the code that enforces it:
+#
+#   provider          Groq, free tier. No payment method is attached, so the
+#                     hard stop is the daily token limit, not a bill.
+#   unit              ~2-4k tokens per answer: 12 excerpts, the prompt, the
+#                     reply. Answers that fail before generating cost nothing.
+#   calls per answer  at most 3 models (primary plus two fallbacks) x 2 attempts
+#                     of ask(). 4xx responses are only ever re-asked of a
+#                     different model, which consumes no tokens.
+#   per session       8 answers (MAX_ANSWERS_PER_SESSION below).
+#   per day           25 answers, about 75-100k tokens, which is meant to sit
+#                     below the free daily budget rather than discover it.
+#   provider cap      Groq daily token limit. Verify in the Groq console that no
+#                     payment method is attached; then exhausting the demo
+#                     cannot cost money, only availability.
+#   concurrency       One Streamlit container, one answer per session, counted
+#                     in a file. Two simultaneous visitors can race by an answer
+#                     or two, which is accepted: the provider limit is the
+#                     backstop.
+#
+# The guard is enforced in app.py before ask(); capability questions (the ones
+# answered from configuration, no model call) do not spend anything.
+QUOTA_GUARD = os.getenv("DEMO1_QUOTA_GUARD", "on").strip().lower() not in (
+    "off", "0", "false", "no",
+)
+MAX_ANSWERS_PER_SESSION = int(os.getenv("DEMO1_MAX_ANSWERS_PER_SESSION") or 8)
+MAX_ANSWERS_PER_DAY = int(os.getenv("DEMO1_MAX_ANSWERS_PER_DAY") or 25)
+MIN_SECONDS_BETWEEN_ANSWERS = float(os.getenv("DEMO1_MIN_SECONDS") or 4)
+QUOTA_FILE = Path(
+    os.getenv("DEMO1_QUOTA_FILE")
+    or (Path(tempfile.gettempdir()) / "demo1_quota.json")
+)
 
 # ─────────────────────────────────────────────
 # Embeddings + chunking

@@ -125,6 +125,15 @@ audit finding cannot come back quietly.
 how this app died) and falls back to the next model on a rate limit or a
 retirement.
 
+**The public demo pays for itself in quota, so the quota is rationed.** It
+answers with `openai/gpt-oss-20b` on a free key that anyone with the URL can
+spend, and `quota.py` enforces the contract written in `config.py`: 8 answers
+per visit, 25 per day host-wide, four seconds between questions. The counter is
+a file, because a free container has no shared store; a restart resets it and
+the provider's own daily limit is the backstop. Answers assembled from
+configuration cost nothing and are not counted. `DEMO1_QUOTA_GUARD=off` lifts
+the guard where the key is the developer's own.
+
 **Query expansion was removed.** It scored identically with and without it —
 one LLM call per question for no measurable gain.
 

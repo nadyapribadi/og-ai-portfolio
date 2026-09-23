@@ -215,8 +215,15 @@ Solution: use OCR software to convert scanned PDFs to text-based PDFs before ing
 Same issue — pdfplumber extracted nothing from scanned pages.
 
 **Rate limit error in the app**
-Groq free tier: 100,000 tokens/day on 70B model (~35-50 answers/day).
-Wait a few minutes — limits reset in rolling windows, not just at midnight.
+The app runs on a free Groq key: a daily token budget and a per-minute request
+limit. The provider resets those on rolling windows, not at midnight, so waiting
+a few minutes usually clears it. The app's own quota messages ("Session limit
+reached", "Demo quota used for today") are separate: they are local limits that
+keep one visitor from spending the whole day's budget, and they are configured
+in `config.py` (`MAX_ANSWERS_PER_SESSION`, `MAX_ANSWERS_PER_DAY`,
+`MIN_SECONDS_BETWEEN_ANSWERS`) or through the `DEMO1_*` environment variables.
+
+To lift them for local work, where the key is yours: `DEMO1_QUOTA_GUARD=off`.
 
 **"No Groq API key configured"**
 The app retrieves without a key but cannot answer without one — every question
@@ -253,7 +260,7 @@ that pdfplumber could not extract cleanly.
 |---|---|
 | Scanned PDFs return nothing | pdfplumber requires a text layer |
 | Complex multi-page tables may be incomplete | pdfplumber reads page by page |
-| 35-50 questions/day on free Groq tier | 100k token/day limit on 70B model |
+| Questions per day are capped | The demo runs on a free Groq key; see the quota section above |
 | Author/metadata questions often fail | Author info is on page 1, semantically far from metadata queries |
 
 ---

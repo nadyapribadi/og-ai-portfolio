@@ -76,6 +76,30 @@ Not enabled: secret scanning for non-provider patterns and validity checks.
 GitHub only offers those with GitHub Advanced Security, so they are left off
 rather than paid for on a portfolio repository.
 
+## Cost and abuse
+
+The hosted demo answers with a free Groq key, so the exposure is quota, not
+money. The cost contract for that call path, written before the code that
+enforces it, is in `demo1_doc_intelligence/src/config.py`:
+
+| Bound | Value | Where it lives |
+|---|---|---|
+| Model calls per answer | at most 3 models x 2 attempts, and only token-producing calls cost anything | `src/llm.py`, `src/retrieval.py` |
+| Answers per visit | 8 | `MAX_ANSWERS_PER_SESSION` |
+| Answers per day, host-wide | 25, roughly 75-100k tokens | `MAX_ANSWERS_PER_DAY` |
+| Minimum seconds between answers | 4 | `MIN_SECONDS_BETWEEN_ANSWERS` |
+| Provider hard cap | Groq's daily token limit, with no payment method attached so exceeding it cannot bill | Groq console, out of band |
+
+The counter lives in a file because a free container has no shared store; a
+restart resets it, which is accepted because the provider limit is the backstop.
+Questions answered from configuration (for example "what can you do?") never
+reach the model and are not counted. Verified by `tests/test_quota.py` and by
+two app-level tests that assert a configuration answer spends nothing and a
+model answer spends quota before the call, not after success.
+
+If you operate a fork of this demo with your own key, do the same two things:
+state the caps in the code, and set the hard cap in the provider dashboard.
+
 ## Dependencies
 
 Dependencies are pinned in `demo1_doc_intelligence/requirements.txt`, with the

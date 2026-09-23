@@ -2,16 +2,19 @@ import streamlit as st
 import html
 import sys
 import os
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from retrieval import (
     ask,
     corpus_sources,
+    is_capability_question,
     load_vectorstore,
     rerank_strategy,
     validate_models,
 )
+import quota
 from config import (
     APP_TITLE,
     DOCUMENT_SOURCES, SOURCE_FRIENDLY, LLM_MODEL_QUALITY,
@@ -349,6 +352,31 @@ if question:
     with st.chat_message("user"):
         st.markdown(question)
 
+    # Cost guard, before anything is sent to the model. Questions answered from
+    # configuration ("what can you do?") never reach the model, so they are not
+    # counted against the quota. The contract behind these limits is written in
+    # config.py next to the values.
+    if not is_capability_question(question):
+        reservation = quota.reserve(
+            session_used=st.session_state.get("answers_asked", 0),
+            last_answer_at=st.session_state.get("last_answer_at"),
+        )
+        if not reservation.ok:
+            print(
+                f"  quota guard refused ({reservation.reason}); "
+                f"{reservation.remaining_today} left today"
+            )
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": reservation.message,
+                "sources": [],
+                "chunks": [],
+                "id": len(st.session_state.messages),
+            })
+            st.rerun()          # render it from history like any other answer
+        st.session_state["answers_asked"] = st.session_state.get("answers_asked", 0) + 1
+        st.session_state["last_answer_at"] = time.time()
+
     # Generate answer
     with st.chat_message("assistant"):
         status_placeholder = st.empty()
@@ -421,11 +449,12 @@ if question:
             if "429" in error_msg or "rate_limit" in error_msg.lower():
                 st.warning(
                     "**Daily limit reached.**\n\n"
-                    "The free Groq tier allows 100,000 tokens/day on the 70B model. "
-                    "It resets in rolling windows, not just at midnight, so try "
-                    "again in a few minutes.\n\n"
-                    "If it happens often, a shorter question or fewer source "
-                    "excerpts per answer will use less of the daily budget."
+                    "This demo runs on a free API key, and the provider's daily "
+                    "token budget is spent. It resets on a rolling window, so "
+                    "trying again in a few minutes may work.\n\n"
+                    "If you are running this locally, the same limit applies to "
+                    "your key: a shorter question uses less of the budget, and "
+                    "the request is not billed either way."
                 )
             else:
                 st.error(
